@@ -1,8 +1,12 @@
+use std::iter::Peekable;
+
 #[derive(Debug, PartialEq)]
 pub struct Attribute {
     pub name: String,
     pub value: Option<String>,
 }
+
+const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style"];
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -12,6 +16,8 @@ pub enum Token {
     SelfClosing { name: String, attributes: Vec<Attribute> },
     PhpBlock(String),
     PhpEcho(String),
+    Doctype(String),
+    Comment(String),
 }
 
 fn skip_whitespace(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
@@ -64,6 +70,33 @@ fn consume_attr_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> S
     value
 }
 
+fn try_consume_php_attr(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Attribute> {
+    if chars.peek() != Some(&'<') {
+        return None;
+    }
+    let mut lookahead = chars.clone();
+    lookahead.next();
+    if lookahead.peek() != Some(&'?') {
+        return None;
+    }
+    let mut php_buf = String::from("<?");
+    chars.next();
+    chars.next();
+    while let Some(&c) = chars.peek() {
+        php_buf.push(c);
+        chars.next();
+        if c == '?' && chars.peek() == Some(&'>') {
+            php_buf.push('>');
+            chars.next();
+            break;
+        }
+    }
+    Some(Attribute {
+        name: php_buf,
+        value: None,
+    })
+}
+
 fn parse_attributes(raw: &str) -> Vec<Attribute> {
     let mut attrs = Vec::new();
     let mut chars = raw.chars().peekable();
@@ -71,32 +104,12 @@ fn parse_attributes(raw: &str) -> Vec<Attribute> {
     loop {
         skip_whitespace(&mut chars);
 
-        if chars.peek() == Some(&'<') {
-            let mut lookahead = chars.clone();
-            lookahead.next();
-            if lookahead.peek() == Some(&'?') {
-                let mut php_buf = String::from("<?");
-                chars.next();
-                chars.next();
-                while let Some(&c) = chars.peek() {
-                    php_buf.push(c);
-                    chars.next();
-                    if c == '?' && chars.peek() == Some(&'>') {
-                        php_buf.push('>');
-                        chars.next();
-                        break;
-                    }
-                }
-                attrs.push(Attribute {
-                    name: php_buf,
-                    value: None,
-                });
-                continue;
-            }
+        if let Some(attr) = try_consume_php_attr(&mut chars) {
+            attrs.push(attr);
+            continue;
         }
 
         let name = consume_attr_name(&mut chars);
-
         if name.is_empty() {
             break;
         }
@@ -176,6 +189,34 @@ fn consume_php_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> St
     }
 }
 
+fn consume_raw_text(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, tag_name: &str) -> (String, bool) {
+    let mut content = String::new();
+    let close_pattern = format!("</{}", tag_name);
+    let close_upper = close_pattern.to_uppercase();
+
+    while chars.peek().is_some() {
+        let rest: String = chars.clone().collect();
+        let rest_upper = rest.to_uppercase();
+        if rest_upper.starts_with(&close_upper) {
+            for _ in 0..close_pattern.len() {
+                chars.next();
+            }
+            while let Some(&c) = chars.peek() {
+                chars.next();
+                if c == '>' {
+                    break;
+                }
+            }
+            return (content, true);
+        }
+        if let Some(c) = chars.next() {
+            content.push(c);
+        }
+    }
+
+    (content, false)
+}
+
 fn consume_php_tag_prefix(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
     if chars.peek() != Some(&'h') {
         return false;
@@ -218,6 +259,136 @@ fn try_consume_php(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Opti
     }
 }
 
+fn try_consume_comment(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Token> {
+    let mut look = chars.clone();
+    look.next();
+    let next_two: String = look.take(2).collect();
+    if next_two != "--" {
+        return None;
+    }
+    chars.next();
+    chars.next();
+    chars.next();
+    let mut comment = String::new();
+    loop {
+        match chars.next() {
+            None => break,
+            Some('-') => {
+                if chars.peek() == Some(&'-') {
+                    chars.next();
+                    if chars.peek() == Some(&'>') {
+                        chars.next();
+                        break;
+                    }
+                    comment.push('-');
+                    comment.push('-');
+                } else {
+                    comment.push('-');
+                }
+            }
+            Some(c) => comment.push(c),
+        }
+    }
+    Some(Token::Comment(comment.trim().to_string()))
+}
+
+fn try_consume_doctype(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Token> {
+    let mut look = chars.clone();
+    look.next();
+    let rest: String = look.take(7).collect();
+    if !rest.to_uppercase().starts_with("DOCTYPE") {
+        return None;
+    }
+    chars.next();
+    for _ in 0..7 {
+        chars.next();
+    }
+    let mut buf = String::new();
+    while let Some(&c) = chars.peek() {
+        chars.next();
+        if c == '>' {
+            break;
+        }
+        buf.push(c);
+    }
+    Some(Token::Doctype(buf.trim().to_string()))
+}
+
+fn consume_php_in_tag(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
+    buf.push('<');
+    buf.push('?');
+    chars.next();
+    while let Some(&pc) = chars.peek() {
+        buf.push(pc);
+        chars.next();
+        if pc == '?' && chars.peek() == Some(&'>') {
+            buf.push('>');
+            chars.next();
+            break;
+        }
+    }
+}
+
+fn consume_tag_body(chars: &mut Peekable<std::str::Chars<'_>>) -> String {
+    let mut buf = String::new();
+    let mut in_quote: Option<char> = None;
+    while let Some(&c) = chars.peek() {
+        if let Some(q) = in_quote {
+            if c == '<' {
+                chars.next();
+                if chars.peek() == Some(&'?') {
+                    consume_php_in_tag(chars, &mut buf);
+                } else {
+                    buf.push('<');
+                }
+            } else {
+                buf.push(c);
+                chars.next();
+                if c == q {
+                    in_quote = None;
+                }
+            }
+        } else if c == '<' {
+            chars.next();
+            if chars.peek() == Some(&'?') {
+                consume_php_in_tag(chars, &mut buf);
+            } else {
+                buf.push('<');
+            }
+        } else if c == '"' || c == '\'' {
+            in_quote = Some(c);
+            buf.push(c);
+            chars.next();
+        } else if c == '>' {
+            chars.next();
+            break;
+        } else {
+            buf.push(c);
+            chars.next();
+        }
+    }
+    buf
+}
+
+fn emit_tag_token(tag_buf: &str, chars: &mut Peekable<std::str::Chars<'_>>, tokens: &mut Vec<Token>) {
+    let tag = parse_tag(tag_buf);
+    if let Token::OpenTag { ref name, .. } = tag {
+        if RAW_TEXT_ELEMENTS.contains(&name.to_lowercase().as_str()) {
+            let tag_name = name.clone();
+            tokens.push(tag);
+            let (raw_content, found_close) = consume_raw_text(chars, &tag_name);
+            if !raw_content.is_empty() {
+                tokens.push(Token::Text(raw_content));
+            }
+            if found_close {
+                tokens.push(Token::CloseTag(tag_name));
+            }
+            return;
+        }
+    }
+    tokens.push(tag);
+}
+
 pub fn tokenize(input: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
@@ -239,68 +410,19 @@ pub fn tokenize(input: &str) -> Vec<Token> {
                 tokens.push(Token::Text(std::mem::take(&mut text_buf)));
             }
 
-            let mut tag_buf = String::new();
-            let mut in_quote: Option<char> = None;
-
-            while let Some(&c) = chars.peek() {
-                if let Some(q) = in_quote {
-                    if c == '<' {
-                        chars.next();
-                        if chars.peek() == Some(&'?') {
-                            tag_buf.push('<');
-                            tag_buf.push('?');
-                            chars.next();
-                            while let Some(&pc) = chars.peek() {
-                                tag_buf.push(pc);
-                                chars.next();
-                                if pc == '?' && chars.peek() == Some(&'>') {
-                                    tag_buf.push('>');
-                                    chars.next();
-                                    break;
-                                }
-                            }
-                        } else {
-                            tag_buf.push('<');
-                        }
-                    } else {
-                        tag_buf.push(c);
-                        chars.next();
-                        if c == q {
-                            in_quote = None;
-                        }
-                    }
-                } else if c == '<' {
-                    chars.next();
-                    if chars.peek() == Some(&'?') {
-                        tag_buf.push('<');
-                        tag_buf.push('?');
-                        chars.next();
-                        while let Some(&pc) = chars.peek() {
-                            tag_buf.push(pc);
-                            chars.next();
-                            if pc == '?' && chars.peek() == Some(&'>') {
-                                tag_buf.push('>');
-                                chars.next();
-                                break;
-                            }
-                        }
-                    } else {
-                        tag_buf.push('<');
-                    }
-                } else if c == '"' || c == '\'' {
-                    in_quote = Some(c);
-                    tag_buf.push(c);
-                    chars.next();
-                } else if c == '>' {
-                    chars.next();
-                    break;
-                } else {
-                    tag_buf.push(c);
-                    chars.next();
+            if chars.peek() == Some(&'!') {
+                if let Some(t) = try_consume_comment(&mut chars) {
+                    tokens.push(t);
+                    continue;
+                }
+                if let Some(t) = try_consume_doctype(&mut chars) {
+                    tokens.push(t);
+                    continue;
                 }
             }
 
-            tokens.push(parse_tag(&tag_buf));
+            let tag_buf = consume_tag_body(&mut chars);
+            emit_tag_token(&tag_buf, &mut chars, &mut tokens);
         } else {
             text_buf.push(ch);
             chars.next();
@@ -456,6 +578,74 @@ mod tests {
         assert_eq!(
             tokenize("hello <?php if ($x): ?> world"),
             vec![text("hello "), Token::PhpBlock("if ($x):".into()), text(" world"),]
+        );
+    }
+
+    #[test]
+    fn script_raw_text() {
+        assert_eq!(
+            tokenize("<script>if (a < b) { alert(1); }</script>"),
+            vec![
+                open("script", vec![]),
+                text("if (a < b) { alert(1); }".into()),
+                close("script"),
+            ]
+        );
+    }
+
+    #[test]
+    fn style_raw_text() {
+        assert_eq!(
+            tokenize("<style>.a > .b { color: red; }</style>"),
+            vec![
+                open("style", vec![]),
+                text(".a > .b { color: red; }".into()),
+                close("style"),
+            ]
+        );
+    }
+
+    #[test]
+    fn script_with_attributes() {
+        assert_eq!(
+            tokenize(r#"<script type="text/javascript">var x = 1;</script>"#),
+            vec![
+                open("script", vec![("type", Some("text/javascript"))]),
+                text("var x = 1;".into()),
+                close("script"),
+            ]
+        );
+    }
+
+    #[test]
+    fn doctype_token() {
+        assert_eq!(tokenize("<!DOCTYPE html>"), vec![Token::Doctype("html".into())]);
+    }
+
+    #[test]
+    fn comment_token() {
+        assert_eq!(
+            tokenize("<!-- This is a comment -->"),
+            vec![Token::Comment("This is a comment".into())]
+        );
+    }
+
+    #[test]
+    fn doctype_and_comment_with_html() {
+        assert_eq!(
+            tokenize("<!DOCTYPE html>\n<html>\n<!-- comment -->\n<body></body>\n</html>"),
+            vec![
+                Token::Doctype("html".into()),
+                text("\n"),
+                open("html", vec![]),
+                text("\n"),
+                Token::Comment("comment".into()),
+                text("\n"),
+                open("body", vec![]),
+                close("body"),
+                text("\n"),
+                close("html"),
+            ]
         );
     }
 }
