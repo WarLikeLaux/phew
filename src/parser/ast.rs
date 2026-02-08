@@ -18,6 +18,32 @@ pub enum Node {
     Text(String),
     PhpBlock(String),
     PhpEcho(String),
+    Doctype(String),
+    Comment(String),
+}
+
+fn close_tag_unwind(close_name: &str, stack: &mut Vec<(String, Vec<Attribute>, Vec<Node>)>, current: &mut Vec<Node>) {
+    let close_lower = close_name.to_lowercase();
+    if let Some(pos) = stack.iter().rposition(|(n, _, _)| n.to_lowercase() == close_lower) {
+        while stack.len() > pos + 1 {
+            if let Some((name, attributes, mut parent)) = stack.pop() {
+                parent.push(Node::Element {
+                    name,
+                    attributes,
+                    children: std::mem::take(current),
+                });
+                *current = parent;
+            }
+        }
+        if let Some((name, attributes, mut parent)) = stack.pop() {
+            parent.push(Node::Element {
+                name,
+                attributes,
+                children: std::mem::take(current),
+            });
+            *current = parent;
+        }
+    }
 }
 
 pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
@@ -37,16 +63,7 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
                     stack.push((name, attributes, std::mem::take(&mut current)));
                 }
             }
-            Token::CloseTag(_) => {
-                if let Some((name, attributes, mut parent)) = stack.pop() {
-                    parent.push(Node::Element {
-                        name,
-                        attributes,
-                        children: std::mem::take(&mut current),
-                    });
-                    current = parent;
-                }
-            }
+            Token::CloseTag(close_name) => close_tag_unwind(&close_name, &mut stack, &mut current),
             Token::SelfClosing { name, attributes } => {
                 current.push(Node::Element {
                     name,
@@ -57,6 +74,8 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
             Token::Text(s) => current.push(Node::Text(s)),
             Token::PhpBlock(s) => current.push(Node::PhpBlock(s)),
             Token::PhpEcho(s) => current.push(Node::PhpEcho(s)),
+            Token::Doctype(s) => current.push(Node::Doctype(s)),
+            Token::Comment(s) => current.push(Node::Comment(s)),
         }
     }
     while let Some((name, attributes, mut parent)) = stack.pop() {
