@@ -25,6 +25,9 @@ jobs:
       - name: test
         run: cargo test
 
+      - name: fixtures
+        run: ./bin/check-fixtures
+
       - name: build
         run: cargo build --release
 

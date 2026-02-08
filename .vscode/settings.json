@@ -1,21 +1,10 @@
 {
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
     "[php]": {
         "editor.formatOnSave": false
     },
-    "files.exclude": {
-        "**/target": true
-    },
-    "files.watcherExclude": {
-        "**/target/**": true,
-        "**/.diff-parts/**": true
-    },
-    "search.exclude": {
-        "**/target/**": true,
-        "**/.diff-parts/**": true
-    },
-    "intelephense.files.exclude": [
-        "**/target/**",
-        "**/.diff-parts/**"
-    ],
     "antigravity.searchMaxWorkspaceFileCount": 1000
 }

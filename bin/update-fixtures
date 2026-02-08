@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p tests/fixtures/expected
+DIR="tests/fixtures"
+mkdir -p "$DIR/expected"
 
-for input in tests/fixtures/input/*; do
+trap 'rm -f /tmp/phrust_update_*' EXIT
+
+for input in "$DIR"/input/*; do
     name=$(basename "$input")
-    echo "Updating $name..."
-    cargo run -q -- "$input" > "tests/fixtures/expected/$name"
+    expected="$DIR/expected/$name"
+    tmp_file="/tmp/phrust_update_$name"
+
+    cargo run -q -- "$input" > "$tmp_file"
+
+    if [ -f "$expected" ] && diff -q "$expected" "$tmp_file" > /dev/null 2>&1; then
+        echo "  ✓ $name (unchanged)"
+    else
+        mv "$tmp_file" "$expected"
+        echo "  ↻ $name (updated)"
+    fi
 done
 
+echo ""
 echo "✅ All fixtures updated!"

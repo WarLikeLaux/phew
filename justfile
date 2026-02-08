@@ -7,7 +7,7 @@ dev: fmt lint
 test:
     cargo test
 
-check: lint test
+check: lint test fixtures
     @echo "✅ check ok"
 
 fmt:
