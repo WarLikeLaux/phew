@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MAX_CHARS=${1:-15000}
+OUT_DIR=".diff-parts"
+
+diffs=()
+names=()
+sizes=()
+
+while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    content=$(git diff -- "$file")
+    [[ -n "$content" ]] && { diffs+=("$content"); names+=("$file"); sizes+=("${#content}"); }
+done < <(git diff --name-only)
+
+while IFS= read -r file; do
+    [[ -z "$file" ]] && continue
+    content="--- /dev/null
++++ b/${file}"
+    while IFS= read -r line; do
+        content+=$'\n'"+"$line
+    done < "$file"
+    diffs+=("$content")
+    names+=("$file")
+    sizes+=("${#content}")
+done < <(git ls-files --others --exclude-standard)
+
+if [[ ${#diffs[@]} -eq 0 ]]; then
+    echo "Нет изменений"
+    exit 0
+fi
+
+total=0
+for s in "${sizes[@]}"; do
+    total=$((total + s))
+done
+
+if [[ $total -le $MAX_CHARS ]]; then
+    for d in "${diffs[@]}"; do
+        echo "$d"
+    done
+    echo "---"
+    echo "Всего: ${total} символов"
+    exit 0
+fi
+
+rm -rf "$OUT_DIR"
+mkdir -p "$OUT_DIR"
+
+order=($(for i in "${!sizes[@]}"; do echo "$i ${sizes[$i]}"; done | sort -k2 -rn | awk '{print $1}'))
+
+bins=()
+bin_sizes=()
+
+for idx in "${order[@]}"; do
+    size=${sizes[$idx]}
+    placed=false
+
+    for b in "${!bin_sizes[@]}"; do
+        if [[ $((bin_sizes[b] + size)) -le $MAX_CHARS ]]; then
+            bins[$b]="${bins[$b]}"$'\n'"${diffs[$idx]}"
+            bin_sizes[$b]=$((bin_sizes[$b] + size))
+            placed=true
+            break
+        fi
+    done
+
+    if [[ "$placed" == false ]]; then
+        bins+=("${diffs[$idx]}")
+        bin_sizes+=("$size")
+    fi
+done
+
+for i in "${!bins[@]}"; do
+    echo "${bins[$i]}" > "${OUT_DIR}/$(printf '%02d' $((i + 1))).diff"
+done
+
+echo "Diff: ${total} символов (лимит ${MAX_CHARS} на часть)"
+echo "Разбит на ${#bins[@]} частей в ${OUT_DIR}/:"
+for f in "${OUT_DIR}"/*.diff; do
+    chars=$(wc -c < "$f")
+    echo "  $(realpath "$f") - ${chars} символов"
+done
