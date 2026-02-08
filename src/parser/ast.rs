@@ -1,5 +1,13 @@
 use super::lexer::{Attribute, Token};
 
+const VOID_ELEMENTS: &[&str] = &[
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
+];
+
+fn is_void_element(name: &str) -> bool {
+    VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Node {
     Element {
@@ -19,7 +27,15 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
     for token in tokens {
         match token {
             Token::OpenTag { name, attributes } => {
-                stack.push((name, attributes, std::mem::take(&mut current)));
+                if is_void_element(&name) {
+                    current.push(Node::Element {
+                        name,
+                        attributes,
+                        children: Vec::new(),
+                    });
+                } else {
+                    stack.push((name, attributes, std::mem::take(&mut current)));
+                }
             }
             Token::CloseTag(_) => {
                 if let Some((name, attributes, mut parent)) = stack.pop() {
