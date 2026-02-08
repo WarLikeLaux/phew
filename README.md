@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
-[![Tests](https://img.shields.io/badge/Tests-44_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-30_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.3.2-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-50_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-45_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.4.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -42,14 +42,16 @@ View-файлы в Yii 2 — это `.php`, внутри которых HTML, PH
 - ✅ Парсинг смешанного HTML + PHP в единое AST-дерево
 - ✅ Правильные отступы для вложенных HTML-элементов и PHP-блоков
 - ✅ Альтернативный синтаксис PHP: `if/elseif/else`, `foreach`, `for`, `while`, `switch/case`
+- ✅ Нормализация `switch/case`: split `switch:` / `case` / `break;` / `default:` на отдельные строки
 - ✅ Форматирование PHP-кода: пробелы у ключевых слов, `=>`, запятых
-- ✅ Разбивка длинных строк (> 120 символов): по аргументам, цепочкам, вложенным массивам
-- ✅ Поддержка Yii 2: `ActiveForm::begin/end`, виджеты, `GridView`, `DetailView`, `Nav`, `Modal`, `Pjax`, `Breadcrumbs`
+- ✅ Разбивка длинных строк (целевой лимит ≤120 символов): по аргументам, цепочкам, вложенным массивам
+- ✅ Поддержка Yii 2: `::begin()`/`::end()` пары (ActiveForm, Modal, Pjax и др.), виджеты, `GridView`, `DetailView`, `Nav`, `Breadcrumbs`
 - ✅ Inline-элементы (`<span>`, `<a>`, `<strong>` и др.) без переноса на новую строку
 - ✅ Void-элементы (`<br>`, `<img>`, `<input>`, `<hr>` и др.)
 - ✅ Рекурсивный обход директорий (`.php` и `.html`)
 - ✅ Trailing comma в многострочных вызовах
 - ✅ Пустая строка после `use`-блока и перед закрывающим `?>`
+- ✅ POSIX EOF: файл заканчивается ровно одним `\n`, без лишней пустой строки
 - ✅ Header-блоки PHP (declare, namespace, use) с правильным форматированием
 - ✅ CLI: `--write`, `--tokens`, `--tree`, поддержка файлов и директорий
 
@@ -122,12 +124,12 @@ src/
 ├── lib.rs               # Публичные модули
 ├── config.rs            # Конфиг (заглушка под .phrust.toml)
 ├── parser/
-│   ├── lexer.rs         # Токенизатор HTML + PHP (455 строк)
-│   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (209 строк)
+│   ├── lexer.rs         # Токенизатор HTML + PHP (629 строк)
+│   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (234 строк)
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
-│   ├── engine.rs        # Движок форматирования (712 строк)
-│   ├── php.rs           # PHP: keyword spacing, fat arrow, commas, splitting (407 строк)
+│   ├── engine.rs        # Движок форматирования (829 строк)
+│   ├── php.rs           # PHP: keyword spacing, fat arrow, commas, splitting (425 строк)
 │   ├── html.rs          # HTML-правила (заглушка)
 │   └── yii.rs           # Yii 2 паттерны (заглушка)
 └── io/
@@ -150,20 +152,22 @@ src/
 
 ## Тестирование
 
-**44 unit-теста** по всем модулям:
+**50 unit-тестов** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
-| `parser::lexer` | 13 |
+| `parser::lexer` | 19 |
 | `parser::ast` | 6 |
 | `formatter::engine` | 7 |
 | `formatter::php` | 11 |
 | stubs (config, html, yii, io) | 7 |
 
-**28 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**45 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
+| 01 | `html_div` | Чистый HTML (.html) |
+| 02 | `html_attrs` | HTML-атрибуты (.html) |
 | 03 | `echo` | PHP echo-блоки |
 | 04 | `control_flow` | if/elseif/else/endif |
 | 05 | `chain` | Цепочки вызовов `->` |
@@ -192,6 +196,20 @@ src/
 | 28 | `nav_items` | Nav с подменю |
 | 29 | `inline_loop` | Inline PHP в циклах |
 | 30 | `switch_case` | switch/case/default |
+| 31 | `script_raw_text` | JS в `<script>` (raw-text) |
+| 32 | `style_raw_text` | CSS в `<style>` (raw-text) |
+| 33 | `doctype` | `<!DOCTYPE>` |
+| 34 | `html_comments` | `<!-- -->` комментарии |
+| 35 | `brace_if_else` | Brace-style if/else |
+| 36 | `brace_foreach` | Brace-style foreach |
+| 37 | `for_while_alt` | for/while alt-syntax |
+| 38 | `brace_for_while` | Brace-style for/while |
+| 39 | `echo_full_form` | `<?php echo ?>` full form |
+| 40 | `while_endwhile` | while/endwhile |
+| 41 | `mid_html_php` | PHP в середине HTML |
+| 42 | `nested_widget` | Вложенные widget begin/end |
+| 43 | `empty_file` | Пустой файл |
+| 44 | `text_only` | Текст без тегов |
 
 ```bash
 # Unit-тесты
@@ -207,7 +225,7 @@ just fixtures       # или ./bin/check-fixtures
 |---------|----------|
 | `just dev` | fmt + clippy |
 | `just test` | cargo test |
-| `just check` | clippy + test |
+| `just check` | clippy + test + fixtures |
 | `just fixtures` | Проверка fixture-пар |
 | `just build` | Релизная сборка |
 | `just run <args>` | Запуск с аргументами |
@@ -222,13 +240,24 @@ just fixtures       # или ./bin/check-fixtures
 |------|------|--------|
 | **0.1** | Лексер + базовое форматирование HTML | ✅ |
 | **0.2** | Обработка PHP-блоков, line splitting, fixtures | ✅ |
-| **0.3** | Паттерны Yii 2, switch/case, расширенные fixtures | ✅ |
-| **0.4** | Конфиг `.phrust.toml` | 🔜 |
+| **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
+| **0.4** | Decompose all functions ≤50 lines, version bump | ✅ |
+| **0.5** | Конфиг `.phrust.toml` | 🔜 |
 | **1.0** | Стабильный релиз | — |
+
+## Политика форматирования
+
+| Правило | Значение |
+|---------|----------|
+| **Целевая длина строки** | ≤120 символов |
+| **Исключения** | `<?= ... ?>` echo-блоки, где перенос ухудшает читаемость или ломает выражение |
+| **EOF** | Файл заканчивается ровно одним `\n` (POSIX). Лишняя пустая строка `\n\n` недопустима |
+| **Отступ** | 4 пробела |
+| **Trailing comma** | Да, в многострочных вызовах |
 
 ## CI
 
-GitHub Actions: `fmt → clippy → test → build` на каждый push и PR в `main`.
+GitHub Actions: `fmt → clippy → test → fixtures → build` на каждый push и PR в `main`.
 
 ## Лицензия
 
