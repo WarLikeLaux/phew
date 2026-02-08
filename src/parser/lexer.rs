@@ -6,7 +6,7 @@ pub struct Attribute {
     pub value: Option<String>,
 }
 
-const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style"];
+const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style", "textarea"];
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
@@ -168,7 +168,27 @@ fn parse_tag(tag_content: &str) -> Token {
 
 fn consume_php_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
     let mut content = String::new();
+    let mut in_string: Option<char> = None;
     while let Some(&c) = chars.peek() {
+        if let Some(q) = in_string {
+            content.push(c);
+            chars.next();
+            if c == '\\' {
+                if let Some(&esc) = chars.peek() {
+                    content.push(esc);
+                    chars.next();
+                }
+            } else if c == q {
+                in_string = None;
+            }
+            continue;
+        }
+        if c == '\'' || c == '"' {
+            in_string = Some(c);
+            content.push(c);
+            chars.next();
+            continue;
+        }
         if c == '?' {
             chars.next();
             if chars.peek() == Some(&'>') {
@@ -218,11 +238,11 @@ fn consume_raw_text(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, tag_na
 }
 
 fn consume_php_tag_prefix(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
-    if chars.peek() != Some(&'h') {
+    if !matches!(chars.peek(), Some(&'h') | Some(&'H')) {
         return false;
     }
     chars.next();
-    if chars.peek() != Some(&'p') {
+    if !matches!(chars.peek(), Some(&'p') | Some(&'P')) {
         return false;
     }
     chars.next();
@@ -244,7 +264,7 @@ fn try_consume_php(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Opti
             let content = consume_php_block(chars);
             Some(Token::PhpEcho(content))
         }
-        Some(&'p') => {
+        Some(&'p') | Some(&'P') => {
             look.next();
             if !consume_php_tag_prefix(&mut look) {
                 return None;
@@ -252,6 +272,16 @@ fn try_consume_php(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Opti
             chars.next();
             chars.next();
             consume_php_tag_prefix(chars);
+            let content = consume_php_block(chars);
+            Some(Token::PhpBlock(content))
+        }
+        Some(&' ') | Some(&'\n') | Some(&'\r') | Some(&'\t') => {
+            chars.next();
+            let content = consume_php_block(chars);
+            Some(Token::PhpBlock(content))
+        }
+        Some(_) => {
+            chars.next();
             let content = consume_php_block(chars);
             Some(Token::PhpBlock(content))
         }
@@ -582,6 +612,11 @@ mod tests {
     }
 
     #[test]
+    fn short_php_tag_without_space() {
+        assert_eq!(tokenize("<?if ($x): ?>"), vec![Token::PhpBlock("if ($x):".into())]);
+    }
+
+    #[test]
     fn script_raw_text() {
         assert_eq!(
             tokenize("<script>if (a < b) { alert(1); }</script>"),
@@ -614,6 +649,14 @@ mod tests {
                 text("var x = 1;".into()),
                 close("script"),
             ]
+        );
+    }
+
+    #[test]
+    fn textarea_raw_text() {
+        assert_eq!(
+            tokenize("<textarea><b>x</textarea>"),
+            vec![open("textarea", vec![]), text("<b>x"), close("textarea"),]
         );
     }
 
