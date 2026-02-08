@@ -53,6 +53,8 @@ $this->params['breadcrumbs'][] = $this->title;
             <?php endif;?>
 
             <table   class="table table-striped"  >
+
+            
 <tr><th><?= Yii::t('app','ui.id') ?></th>
                     <td><?= Html::encode((string)$viewModel->id) ?></td></tr>
     <tr>
