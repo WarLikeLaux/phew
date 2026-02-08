@@ -180,6 +180,7 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
     let mut prev_blank = false;
     let mut first_content = true;
     let mut prev_was_doc_close = false;
+    let mut prev_was_use = false;
 
     for line in code.lines() {
         let trimmed = line.trim();
@@ -196,12 +197,18 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         }
         first_content = false;
 
+        let is_use_import = trimmed.starts_with("use ");
+        if prev_was_use && !is_use_import && !prev_blank {
+            result.push('\n');
+        }
+
         if prev_was_doc_close && !prev_blank {
             result.push('\n');
         }
 
         prev_blank = false;
         prev_was_doc_close = trimmed == "*/";
+        prev_was_use = is_use_import;
 
         let formatted = format_php_code(trimmed);
         let leading = count_leading_closers(&formatted) as i32;
@@ -378,6 +385,7 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 if is_multiline {
                     output.push_str(&format!("{pad}<?php\n"));
                     output.push_str(&reindent_php_block(code, &pad));
+                    output.push('\n');
                     output.push_str(&format!("{pad}?>\n"));
                 } else {
                     let formatted = format_php_code(code);
