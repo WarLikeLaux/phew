@@ -1,3 +1,4 @@
+use super::php::format_php_code;
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
@@ -51,7 +52,7 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
         .iter()
         .map(|c| match c {
             Node::Text(s) => s.trim().to_string(),
-            Node::PhpEcho(s) => format!("<?= {s} ?>"),
+            Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(s)),
             _ => String::new(),
         })
         .collect();
@@ -91,19 +92,21 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 }
             }
             Node::PhpBlock(code) => {
+                let formatted = format_php_code(code);
                 if is_php_block_closer(code) {
                     current_depth = current_depth.saturating_sub(1);
                     let pad_less = INDENT.repeat(current_depth);
-                    output.push_str(&format!("{pad_less}<?php {code} ?>\n"));
+                    output.push_str(&format!("{pad_less}<?php {formatted} ?>\n"));
                 } else {
-                    output.push_str(&format!("{pad}<?php {code} ?>\n"));
+                    output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
                     if is_php_block_opener(code) {
                         current_depth += 1;
                     }
                 }
             }
             Node::PhpEcho(code) => {
-                output.push_str(&format!("{pad}<?= {code} ?>\n"));
+                let formatted = format_php_code(code);
+                output.push_str(&format!("{pad}<?= {formatted} ?>\n"));
             }
         }
     }
