@@ -23,5 +23,4 @@
             'visible' => Yii::$app->user->can('admin'),
         ],
     ],
-])
- ?>
+]) ?>

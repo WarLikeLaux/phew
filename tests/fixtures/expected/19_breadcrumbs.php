@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+
 use yii\helpers\Html;
 
 $this->title = Yii::t('app', 'ui.books');

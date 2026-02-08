@@ -8,10 +8,10 @@
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
-[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)]()
+[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
 [![Tests](https://img.shields.io/badge/Tests-44_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-28_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.3.1-orange?style=for-the-badge&logo=semver&logoColor=white)]()
+[![Fixtures](https://img.shields.io/badge/Fixtures-30_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.3.1-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -86,7 +86,7 @@ View-файлы в Yii 2 — это `.php`, внутри которых HTML, PH
 ## Установка
 
 ```bash
-cargo install --git https://github.com/WarLikeLaux/phrust --branch dev --force
+cargo install --git https://github.com/WarLikeLaux/phrust --force
 ```
 
 ## Использование
@@ -116,7 +116,7 @@ phrust
 
 ## Архитектура
 
-```
+```text
 src/
 ├── main.rs              # CLI (clap): --write, --tokens, --tree
 ├── lib.rs               # Публичные модули
@@ -213,6 +213,8 @@ just fixtures       # или ./bin/check-fixtures
 | `just run <args>` | Запуск с аргументами |
 | `just fix <args>` | Форматирование с записью |
 | `just d [chars]` | Diff всех изменений |
+| `just review-fetch` | Получить комментарии из PR |
+| `just review-resolve` | Закрыть треды на GitHub |
 
 ## Дорожная карта
 

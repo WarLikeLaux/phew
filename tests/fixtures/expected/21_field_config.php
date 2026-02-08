@@ -11,7 +11,6 @@ $form = ActiveForm::begin([
         'errorOptions' => ['class' => 'col-lg-7 invalid-feedback'],
     ],
 ]);
-
 ?>
 <?= $form->field($model, 'name')->textInput(['maxlength' => true]) ?>
 <?= $form->field($model, 'email')->textInput(['maxlength' => true]) ?>

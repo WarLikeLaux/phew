@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+
 use yii\helpers\Url;
 
 ?>
@@ -17,7 +18,6 @@ use yii\helpers\Url;
                     'hx-push-url' => 'true',
                     'hx-include' => '#search-form',
                 ])
-
                 ->label(false) ?>
         </div>
     </div>

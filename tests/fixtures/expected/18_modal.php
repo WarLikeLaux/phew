@@ -10,7 +10,6 @@ use yii\helpers\Html;
         'id' => 'my-modal',
         'size' => Modal::SIZE_LARGE,
         'options' => ['class' => 'fade', 'tabindex' => -1],
-    ]);
-    echo '<div id="modal-content">' . Yii::t('app', 'ui.loading') . '</div>';
+    ]);    echo '<div id="modal-content">' . Yii::t('app', 'ui.loading') . '</div>';
     Modal::end(); ?>
 </div>
