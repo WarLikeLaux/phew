@@ -32,7 +32,7 @@ pub fn format_php_code(code: &str) -> String {
         }
 
         if matches!(ch, ')' | ']') {
-            while result.ends_with(' ') {
+            while result.ends_with(' ') || result.ends_with(',') {
                 result.pop();
             }
             result.push(ch);

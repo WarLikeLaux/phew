@@ -466,12 +466,26 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
             Node::PhpBlock(code) => {
                 let is_multiline = code.contains('\n') || code.chars().filter(|&c| c == ';').count() > 1;
                 if is_multiline {
-                    output.push_str(&format!("{pad}<?php\n"));
-                    output.push_str(&reindent_php_block(code, &pad));
-                    if is_header_php_block(code) {
+                    let is_header = is_header_php_block(code);
+                    if is_header {
+                        output.push_str(&format!("{pad}<?php\n"));
+                        output.push_str(&reindent_php_block(code, &pad));
                         output.push('\n');
+                        output.push_str(&format!("{pad}?>\n"));
+                    } else {
+                        let reindented = reindent_php_block(code, &pad);
+                        let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
+                        if lines.len() > 1 {
+                            output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+                            for line in &lines[1..lines.len() - 1] {
+                                output.push_str(line);
+                                output.push('\n');
+                            }
+                            output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
+                        } else if lines.len() == 1 {
+                            output.push_str(&format!("{pad}<?php {} ?>\n", lines[0].trim_start()));
+                        }
                     }
-                    output.push_str(&format!("{pad}?>\n"));
                 } else {
                     let formatted = format_php_code(code);
                     if is_php_block_closer(code) {
