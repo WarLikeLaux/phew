@@ -60,26 +60,61 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
     format!("<{name}{attrs}>{content}</{name}>")
 }
 
-fn min_indentation(code: &str) -> usize {
-    code.lines()
-        .filter(|line| !line.trim().is_empty())
-        .map(|line| line.len() - line.trim_start().len())
-        .min()
-        .unwrap_or(0)
+fn count_leading_closers(s: &str) -> usize {
+    s.chars().take_while(|c| matches!(c, ')' | ']' | '}')).count()
+}
+
+fn count_brackets(s: &str) -> (usize, usize) {
+    let mut openers = 0usize;
+    let mut closers = 0usize;
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if matches!(ch, '(' | '[' | '{') {
+            openers += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            closers += 1;
+        }
+        i += 1;
+    }
+
+    (openers, closers)
 }
 
 fn reindent_php_block(code: &str, pad: &str) -> String {
-    let base_indent = min_indentation(code);
     let mut result = String::new();
+    let mut depth: i32 = 0;
+
     for line in code.lines() {
-        if line.trim().is_empty() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
             result.push('\n');
-        } else {
-            let stripped = &line[base_indent.min(line.len())..];
-            let content = format_php_code(stripped);
-            result.push_str(&format!("{pad}{content}\n"));
+            continue;
         }
+
+        let formatted = format_php_code(trimmed);
+        let leading = count_leading_closers(&formatted) as i32;
+        let write_depth = (depth - leading).max(0) as usize;
+        let inner_pad = INDENT.repeat(write_depth);
+        result.push_str(&format!("{pad}{inner_pad}{formatted}\n"));
+
+        let (openers, closers) = count_brackets(&formatted);
+        let net = openers as i32 - closers as i32;
+        depth += net.min(1);
+        depth = depth.max(0);
     }
+
     result
 }
 
@@ -136,7 +171,7 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 let trimmed = s.trim();
                 if !trimmed.is_empty() {
                     output.push_str(&format!("{pad}{trimmed}\n"));
-                } else if s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1 {
+                } else if current_depth <= 1 && s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1 {
                     output.push('\n');
                 }
             }
