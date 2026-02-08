@@ -3,7 +3,9 @@
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-в_разработке-orange)]()
-[![Yii 2](https://img.shields.io/badge/Yii-2.0-4e8ef7?logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAABuSURBVDhPY2AYBYMBMDIw/P8PYUMBIzYJBgYGJmwSIADSwIRNAgRA0kxANj4NTNg0gABIA5jGpQEEQBqIMYMA2P2jGkcMYGRg+A+yG+R2BjAbpwawBpBrGLFJAAFIA0iaYVTjSAJwBzIwMAAAGTkf/5meJhMAAAAASUVORK5CYII=)](https://www.yiiframework.com/)
+[![CI](https://github.com/WarLikeLaux/phrust/actions/workflows/ci.yml/badge.svg)](https://github.com/WarLikeLaux/phrust/actions)
+[![Clippy](https://img.shields.io/badge/Clippy-passing-brightgreen?logo=rust&logoColor=white)]()
+[![Edition](https://img.shields.io/badge/Edition-2024-blue?logo=rust&logoColor=white)]()
 
 > ⚡ Быстрый форматтер HTML + PHP для view-файлов Yii 2, написанный на Rust.
 
