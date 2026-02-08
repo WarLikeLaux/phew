@@ -1,4 +1,5 @@
 use clap::Parser;
+use phrust::parser::{ast, lexer};
 
 #[derive(Parser)]
 #[command(name = "phrust")]
@@ -9,6 +10,44 @@ struct Cli {
 
     #[arg(long, help = "Show tokens instead of formatting")]
     tokens: bool,
+
+    #[arg(long, help = "Show AST tree")]
+    tree: bool,
+}
+
+fn print_tree(nodes: &[ast::Node], indent: usize) {
+    let pad = "  ".repeat(indent);
+    for node in nodes {
+        match node {
+            ast::Node::Element {
+                name,
+                attributes,
+                children,
+            } => {
+                if attributes.is_empty() {
+                    println!("{pad}<{name}>");
+                } else {
+                    let attrs: Vec<String> = attributes
+                        .iter()
+                        .map(|a| match &a.value {
+                            Some(v) => format!("{}=\"{}\"", a.name, v),
+                            None => a.name.clone(),
+                        })
+                        .collect();
+                    println!("{pad}<{name} {}>", attrs.join(" "));
+                }
+                print_tree(children, indent + 1);
+            }
+            ast::Node::Text(s) => {
+                let trimmed = s.trim();
+                if !trimmed.is_empty() {
+                    println!("{pad}TEXT: {trimmed:?}");
+                }
+            }
+            ast::Node::PhpBlock(s) => println!("{pad}PHP: <?php {s} ?>"),
+            ast::Node::PhpEcho(s) => println!("{pad}PHP: <?= {s} ?>"),
+        }
+    }
 }
 
 fn main() {
@@ -28,14 +67,20 @@ fn main() {
             }
         };
 
+        let tokens = lexer::tokenize(&content);
+
         if cli.tokens {
-            let tokens = phrust::parser::lexer::tokenize(&content);
             println!("=== {path} ===");
             for token in &tokens {
                 println!("{token:?}");
             }
+        } else if cli.tree {
+            let nodes = ast::parse(tokens);
+            println!("=== {path} ===");
+            print_tree(&nodes, 0);
         } else {
-            println!("Would format: {path}");
+            let nodes = ast::parse(tokens);
+            print!("{}", phrust::formatter::engine::format(&nodes));
         }
     }
 }
