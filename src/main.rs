@@ -119,10 +119,17 @@ fn collect_files(dir: &str, out: &mut Vec<String>) {
     paths.sort_by_key(|e| e.path());
     for entry in paths {
         let path = entry.path();
-        if path.is_dir() {
-            collect_files(path.to_str().unwrap_or(""), out);
+        let metadata = match entry.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        if metadata.is_dir() {
+            if !metadata.file_type().is_symlink() {
+                collect_files(&path.to_string_lossy(), out);
+            }
         } else if let Some(ext) = path.extension() {
-            let ext = ext.to_str().unwrap_or("");
+            let ext = ext.to_string_lossy();
             if ext == "php" || ext == "html" {
                 out.push(path.to_string_lossy().to_string());
             }

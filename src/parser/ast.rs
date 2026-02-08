@@ -59,6 +59,14 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
             Token::PhpEcho(s) => current.push(Node::PhpEcho(s)),
         }
     }
+    while let Some((name, attributes, mut parent)) = stack.pop() {
+        parent.push(Node::Element {
+            name,
+            attributes,
+            children: std::mem::take(&mut current),
+        });
+        current = parent;
+    }
 
     current
 }

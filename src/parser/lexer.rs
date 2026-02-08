@@ -76,8 +76,8 @@ fn parse_attributes(raw: &str) -> Vec<Attribute> {
             lookahead.next();
             if lookahead.peek() == Some(&'?') {
                 let mut php_buf = String::from("<?");
-                chars.next(); // <
-                chars.next(); // ?
+                chars.next();
+                chars.next();
                 while let Some(&c) = chars.peek() {
                     php_buf.push(c);
                     chars.next();
@@ -189,22 +189,28 @@ fn consume_php_tag_prefix(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) 
 }
 
 fn try_consume_php(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Option<Token> {
-    if chars.peek() != Some(&'?') {
+    let mut look = chars.clone();
+
+    if look.next() != Some('?') {
         return None;
     }
-    chars.next();
 
-    match chars.peek() {
+    match look.peek() {
         Some(&'=') => {
+            look.next();
+            chars.next();
             chars.next();
             let content = consume_php_block(chars);
             Some(Token::PhpEcho(content))
         }
         Some(&'p') => {
-            chars.next();
-            if !consume_php_tag_prefix(chars) {
+            look.next();
+            if !consume_php_tag_prefix(&mut look) {
                 return None;
             }
+            chars.next();
+            chars.next();
+            consume_php_tag_prefix(chars);
             let content = consume_php_block(chars);
             Some(Token::PhpBlock(content))
         }
