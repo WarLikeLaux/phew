@@ -6,7 +6,9 @@
                     <?php if ($section->hasItems): ?>
                         <ul class="items">
                             <?php foreach ($section->items as $item): ?>
-                                <li class="<?= $item->isActive ? 'active' : '' ?>"><?= Html::a($item->title, ['view', 'id' => $item->id]) ?></li>
+                                <li class="<?= $item->isActive ? 'active' : '' ?>">
+                                    <?= Html::a($item->title, ['view', 'id' => $item->id]) ?>
+                                </li>
                             <?php endforeach; ?>
                         </ul>
                     <?php endif; ?>
