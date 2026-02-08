@@ -25,6 +25,9 @@ run *args:
 fix *args:
     cargo run -- -w {{args}}
 
+fixtures:
+    ./bin/check-fixtures
+
 clean:
     cargo clean
 
