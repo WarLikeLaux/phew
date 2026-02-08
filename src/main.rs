@@ -6,6 +6,9 @@ use clap::Parser;
 struct Cli {
     #[arg(help = "Files or directories to format")]
     paths: Vec<String>,
+
+    #[arg(long, help = "Show tokens instead of formatting")]
+    tokens: bool,
 }
 
 fn main() {
@@ -17,6 +20,22 @@ fn main() {
     }
 
     for path in &cli.paths {
-        println!("Would format: {path}");
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("Error reading {path}: {e}");
+                continue;
+            }
+        };
+
+        if cli.tokens {
+            let tokens = phrust::parser::lexer::tokenize(&content);
+            println!("=== {path} ===");
+            for token in &tokens {
+                println!("{token:?}");
+            }
+        } else {
+            println!("Would format: {path}");
+        }
     }
 }
