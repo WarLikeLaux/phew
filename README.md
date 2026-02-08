@@ -1,4 +1,8 @@
-# phrust
+<p align="center">
+  <img src="docs/hero.png" alt="phrust — fast HTML + PHP formatter" width="100%">
+</p>
+
+<h1 align="center">phrust</h1>
 
 [![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
