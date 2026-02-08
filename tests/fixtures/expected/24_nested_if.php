@@ -1,0 +1,18 @@
+<div class="content">
+    <?php if ($user->isAdmin()): ?>
+        <div class="admin-panel">
+            <h2>Admin</h2>
+            <?php if ($user->hasPermission('manage')): ?>
+                <p><?= Html::a(Yii::t('app', 'ui.manage'), ['admin/manage'], ['class' => 'btn btn-warning']) ?></p>
+            <?php elseif ($user->hasPermission('view')): ?>
+                <p><?= Html::a(Yii::t('app', 'ui.view_only'), ['admin/view'], ['class' => 'btn btn-info']) ?></p>
+            <?php else: ?>
+                <p><?= Yii::t('app', 'ui.no_permissions') ?></p>
+            <?php endif; ?>
+        </div>
+    <?php elseif ($user->isGuest): ?>
+        <p><?= Html::a(Yii::t('app', 'ui.login'), ['site/login'], ['class' => 'btn btn-primary']) ?></p>
+    <?php else: ?>
+        <p><?= Yii::t('app', 'ui.welcome', ['name' => Html::encode($user->name)]) ?></p>
+    <?php endif; ?>
+</div>

@@ -6,6 +6,6 @@
             <?php endforeach; ?>
         </ul>
     <?php else: ?>
-    <p class="empty">No items found</p>
-<?php endif; ?>
+        <p class="empty">No items found</p>
+    <?php endif; ?>
 </div>
