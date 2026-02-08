@@ -1,0 +1,16 @@
+[package]
+name = "phrust"
+version = "0.1.0"
+edition = "2024"
+description = "Fast HTML + PHP formatter for Yii 2 view files"
+license = "MIT"
+repository = "https://github.com/WarLikeLaux/phrust"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+toml = "0.8"
+thiserror = "2"
+anyhow = "1"
+
+[dev-dependencies]
+pretty_assertions = "1"
