@@ -461,6 +461,37 @@ fn format_echo(code: &str, pad: &str) -> String {
     }
 
     if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
+        // Smart inline: keep short args inline, expand only the last array arg
+        if args.len() >= 2 {
+            let last = &args[args.len() - 1];
+            if last.starts_with('[') && last.ends_with(']') {
+                let inline_parts: Vec<&str> = args[..args.len() - 1].iter().map(|s| s.as_str()).collect();
+                let inline_joined = inline_parts.join(", ");
+                let inline_prefix = format!("{pad}<?= {prefix}{inline_joined}, [");
+                if inline_prefix.len() <= MAX_LINE_LENGTH {
+                    let inner = &last[1..last.len() - 1];
+                    let items = split_by_commas(inner);
+                    if items.len() > 1 {
+                        let inner_pad = format!("{pad}{INDENT}");
+                        let mut result = format!("{pad}<?= {prefix}{inline_joined}, [\n");
+                        for item in &items {
+                            let item_line_len = inner_pad.len() + item.len() + 1;
+                            if item_line_len > MAX_LINE_LENGTH
+                                && let Some(expanded) = expand_nested_array(item, &inner_pad)
+                            {
+                                result.push_str(&expanded);
+                                continue;
+                            }
+                            result.push_str(&format!("{inner_pad}{item},\n"));
+                        }
+                        result.push_str(&format!("{pad}]{suffix} ?>\n"));
+                        return result;
+                    }
+                }
+            }
+        }
+
+        // Full split: each arg on its own line
         let mut result = format!("{pad}<?= {prefix}\n");
         for arg in &args {
             result.push_str(&format!("{pad}{INDENT}{arg},\n"));
