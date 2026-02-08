@@ -6,19 +6,19 @@ import path from 'node:path';
 const envPath = path.resolve(process.cwd(), '.env');
 const env = { ...process.env };
 if (fs.existsSync(envPath)) {
-  fs.readFileSync(envPath, "utf8")
-    .split("\n")
-    .filter(line => line.trim() && !line.startsWith("#"))
-    .forEach((line) => {
-      const [key, ...valueParts] = line.split("=");
-      if (key && valueParts.length > 0) {
-        let value = valueParts.join("=").trim();
-        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-          value = value.slice(1, -1);
-        }
-        env[key.trim()] = value;
-      }
-    });
+	fs.readFileSync(envPath, "utf8")
+		.split("\n")
+		.filter(line => line.trim() && !line.startsWith("#"))
+		.forEach((line) => {
+			const [key, ...valueParts] = line.split("=");
+			if (key && valueParts.length > 0) {
+				let value = valueParts.join("=").trim();
+				if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+					value = value.slice(1, -1);
+				}
+				env[key.trim()] = value;
+			}
+		});
 }
 
 const token = env.GITHUB_TOKEN;
@@ -63,7 +63,7 @@ async function main() {
 	const reviewPath = path.resolve(process.cwd(), 'docs/REVIEW.md');
 
 	if (!fs.existsSync(reviewPath)) {
-		console.error('Ошибка: docs/REVIEW.md не найден. Сначала запустите pnpm review:fetch');
+		console.error('Ошибка: docs/REVIEW.md не найден. Сначала запустите just review-fetch');
 		process.exit(1);
 	}
 
