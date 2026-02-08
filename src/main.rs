@@ -61,7 +61,19 @@ fn main() {
         return;
     }
 
+    let mut files: Vec<String> = Vec::new();
     for path in &cli.paths {
+        let meta = std::fs::metadata(path);
+        if let Ok(m) = &meta
+            && m.is_dir()
+        {
+            collect_files(path, &mut files);
+            continue;
+        }
+        files.push(path.clone());
+    }
+
+    for path in &files {
         let content = match std::fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
@@ -90,6 +102,29 @@ fn main() {
                 }
             } else {
                 print!("{formatted}");
+            }
+        }
+    }
+}
+
+fn collect_files(dir: &str, out: &mut Vec<String>) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Error reading {dir}: {e}");
+            return;
+        }
+    };
+    let mut paths: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+    paths.sort_by_key(|e| e.path());
+    for entry in paths {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(path.to_str().unwrap_or(""), out);
+        } else if let Some(ext) = path.extension() {
+            let ext = ext.to_str().unwrap_or("");
+            if ext == "php" || ext == "html" {
+                out.push(path.to_string_lossy().to_string());
             }
         }
     }
