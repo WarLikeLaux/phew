@@ -49,6 +49,41 @@ fn print_tree(nodes: &[ast::Node], indent: usize) {
             }
             ast::Node::PhpBlock(s) => println!("{pad}PHP: <?php {s} ?>"),
             ast::Node::PhpEcho(s) => println!("{pad}PHP: <?= {s} ?>"),
+            ast::Node::Doctype(s) => println!("{pad}DOCTYPE: {s}"),
+            ast::Node::Comment(s) => println!("{pad}COMMENT: {s}"),
+        }
+    }
+}
+
+fn process_file(path: &str, cli: &Cli) {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error reading {path}: {e}");
+            return;
+        }
+    };
+
+    let tokens = lexer::tokenize(&content);
+
+    if cli.tokens {
+        println!("=== {path} ===");
+        for token in &tokens {
+            println!("{token:?}");
+        }
+    } else if cli.tree {
+        let nodes = ast::parse(tokens);
+        println!("=== {path} ===");
+        print_tree(&nodes, 0);
+    } else {
+        let nodes = ast::parse(tokens);
+        let formatted = phrust::formatter::engine::format(&nodes);
+        if cli.write {
+            if let Err(e) = std::fs::write(path, &formatted) {
+                eprintln!("Error writing {path}: {e}");
+            }
+        } else {
+            print!("{formatted}");
         }
     }
 }
@@ -74,36 +109,7 @@ fn main() {
     }
 
     for path in &files {
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Error reading {path}: {e}");
-                continue;
-            }
-        };
-
-        let tokens = lexer::tokenize(&content);
-
-        if cli.tokens {
-            println!("=== {path} ===");
-            for token in &tokens {
-                println!("{token:?}");
-            }
-        } else if cli.tree {
-            let nodes = ast::parse(tokens);
-            println!("=== {path} ===");
-            print_tree(&nodes, 0);
-        } else {
-            let nodes = ast::parse(tokens);
-            let formatted = phrust::formatter::engine::format(&nodes);
-            if cli.write {
-                if let Err(e) = std::fs::write(path, &formatted) {
-                    eprintln!("Error writing {path}: {e}");
-                }
-            } else {
-                print!("{formatted}");
-            }
-        }
+        process_file(path, &cli);
     }
 }
 
