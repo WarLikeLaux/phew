@@ -28,7 +28,7 @@ $this->params['breadcrumbs'][] = $this->title;
                 'attribute' => 'fio',
                 'label' => Yii::t('app', 'ui.fio'),
             ],
-            ['class' => 'yii\grid\ActionColumn',],
+            ['class' => 'yii\grid\ActionColumn'],
         ],
     ])
  ?>
