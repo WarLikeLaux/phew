@@ -1,5 +1,6 @@
 <div class="page">
-    <?php switch ($viewModel->step): case 'intro': ?>
+    <?php switch ($viewModel->step): ?>
+    <?php case 'intro': ?>
         <div class="step step-intro">
             <h2><?= Yii::t('app', 'ui.step_intro') ?></h2>
             <p><?= Yii::t('app', 'ui.step_intro_text') ?></p>
@@ -9,12 +10,14 @@
                 ['class' => 'btn btn-primary btn-lg'],
             ) ?>
         </div>
-    <?php break; case 'details': ?>
+        <?php break; ?>
+    <?php case 'details': ?>
         <div class="step step-details">
             <h2><?= Yii::t('app', 'ui.step_details') ?></h2>
             <?= $this->render('_wizard_form', ['model' => $viewModel->form]) ?>
         </div>
-    <?php break; case 'confirm': ?>
+        <?php break; ?>
+    <?php case 'confirm': ?>
         <div class="step step-confirm">
             <h2><?= Yii::t('app', 'ui.step_confirm') ?></h2>
             <?= $this->render('_wizard_summary', ['model' => $viewModel->summary]) ?>
@@ -23,7 +26,8 @@
                 'data-confirm' => Yii::t('app', 'ui.confirm_submit'),
             ]) ?>
         </div>
-    <?php break; default: ?>
+        <?php break; ?>
+    <?php default: ?>
         <div class="step step-error">
             <p><?= Yii::t('app', 'ui.unknown_step') ?></p>
         </div>
