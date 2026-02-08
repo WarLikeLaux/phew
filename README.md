@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
-[![Tests](https://img.shields.io/badge/Tests-50_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-45_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.4.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-52_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-51_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.4.1-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -152,17 +152,17 @@ src/
 
 ## Тестирование
 
-**50 unit-тестов** по всем модулям:
+**52 unit-теста** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
-| `parser::lexer` | 19 |
+| `parser::lexer` | 21 |
 | `parser::ast` | 6 |
 | `formatter::engine` | 7 |
 | `formatter::php` | 11 |
 | stubs (config, html, yii, io) | 7 |
 
-**45 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**51 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -210,6 +210,13 @@ src/
 | 42 | `nested_widget` | Вложенные widget begin/end |
 | 43 | `empty_file` | Пустой файл |
 | 44 | `text_only` | Текст без тегов |
+| 45 | `brace_switch` | Brace-style switch/case |
+| 46 | `php_close_tag_inside_string` | `?>` внутри PHP-строк |
+| 47 | `break_in_string_no_dedent` | `break;` в строковом литерале |
+| 48 | `uppercase_php_open_tag` | `<?PHP` uppercase |
+| 49 | `short_open_tag` | `<? ... ?>` short tag |
+| 50 | `textarea_rcdata` | RCDATA для `<textarea>` (без парсинга HTML внутри) |
+| 51 | `inline_mixed_text_inline_tag` | Смешанный текст + inline-теги |
 
 ```bash
 # Unit-тесты
@@ -241,7 +248,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.1** | Лексер + базовое форматирование HTML | ✅ |
 | **0.2** | Обработка PHP-блоков, line splitting, fixtures | ✅ |
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
-| **0.4** | Decompose all functions ≤50 lines, version bump | ✅ |
+| **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, 51 fixtures | ✅ |
 | **0.5** | Конфиг `.phrust.toml` | 🔜 |
 | **1.0** | Стабильный релиз | — |
 
