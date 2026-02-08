@@ -98,3 +98,9 @@ cat view.php | phrust --stdin      # из stdin
 - Нужен ли LSP или хватит простого CLI?
 - PHP-форматирование - делать самим или делегировать в `php-cs-fixer` для чистых блоков?
 - Насколько глубоко лезть в Yii-специфику (виджеты, GridView и т.д.)?
+
+## Tooling Roadmap
+
+- [ ] `cargo-deny` (deny.toml) - аудит зависимостей на уязвимости и дубли лицензий
+- [ ] `cargo-nextest` - быстрый test runner с параллелизацией
+- [ ] `benches/` + `criterion` - бенчмарки производительности
