@@ -1,4 +1,4 @@
-use super::php::{format_php_code, join_php_lines, split_by_chain};
+use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
@@ -92,22 +92,127 @@ fn count_brackets(s: &str) -> (usize, usize) {
     (openers, closers)
 }
 
+fn normalize_statements(code: &str) -> String {
+    let mut result = String::from("\n");
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            result.push(ch);
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    result.push(chars[i]);
+                    i += 1;
+                }
+                if i < len {
+                    result.push(chars[i]);
+                    i += 1;
+                }
+            }
+            if i < len {
+                result.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        result.push(ch);
+        if ch == ';' && i + 1 < len && chars[i + 1] != '\n' {
+            result.push('\n');
+        }
+
+        if ch == '/'
+            && i + 1 < len
+            && chars[i + 1] == '*'
+            && i + 2 < len
+            && chars[i + 2] == '*'
+            && !result.ends_with('\n')
+            && result.len() > 1
+        {
+            let last = result.pop().unwrap();
+            result.push('\n');
+            result.push(last);
+        }
+        if ch == '/' && result.len() >= 2 && result.ends_with("*/") {
+            result.pop();
+            result.pop();
+            if !result.ends_with('\n') {
+                let trimmed = result.trim_end().to_string();
+                result.clear();
+                result.push_str(&trimmed);
+                result.push('\n');
+            }
+            result.push_str("*/\n");
+            if i + 1 < len && chars[i + 1] != '\n' {
+                result.push('\n');
+            }
+        }
+
+        if ch == '*'
+            && i + 1 < len
+            && chars[i + 1] == ' '
+            && i + 2 < len
+            && chars[i + 2] == '@'
+            && !result.ends_with('\n')
+            && !result.ends_with('/')
+        {
+            result.pop();
+            result.push('\n');
+            result.push(ch);
+        }
+        i += 1;
+    }
+
+    result
+}
+
 fn reindent_php_block(code: &str, pad: &str) -> String {
+    let code = if !code.contains('\n') && code.contains(';') {
+        normalize_statements(code)
+    } else {
+        code.to_string()
+    };
     let mut result = String::new();
     let mut depth: i32 = 0;
+    let mut prev_blank = false;
+    let mut first_content = true;
+    let mut prev_was_doc_close = false;
 
     for line in code.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
-            result.push('\n');
+            if !prev_blank {
+                result.push('\n');
+                prev_blank = true;
+            }
             continue;
         }
+
+        if first_content && !prev_blank {
+            result.push('\n');
+        }
+        first_content = false;
+
+        if prev_was_doc_close && !prev_blank {
+            result.push('\n');
+        }
+
+        prev_blank = false;
+        prev_was_doc_close = trimmed == "*/";
 
         let formatted = format_php_code(trimmed);
         let leading = count_leading_closers(&formatted) as i32;
         let write_depth = (depth - leading).max(0) as usize;
         let inner_pad = INDENT.repeat(write_depth);
-        result.push_str(&format!("{pad}{inner_pad}{formatted}\n"));
+
+        if formatted.starts_with('*') {
+            result.push_str(&format!("{pad}{inner_pad} {formatted}\n"));
+        } else {
+            result.push_str(&format!("{pad}{inner_pad}{formatted}\n"));
+        }
 
         let (openers, closers) = count_brackets(&formatted);
         let net = openers as i32 - closers as i32;
@@ -128,17 +233,30 @@ fn format_echo(code: &str, pad: &str) -> String {
     }
 
     let parts = split_by_chain(&formatted);
-    if parts.len() <= 2 {
-        return format!("{single}\n");
+    if parts.len() > 2 {
+        let mut result = format!("{pad}<?= {}{}", parts[0], parts[1]);
+        for part in &parts[2..] {
+            result.push_str(&format!("\n{pad}{INDENT}{part}"));
+        }
+        result.push_str(" ?>");
+        result.push('\n');
+        return result;
     }
 
-    let mut result = format!("{pad}<?= {}{}", parts[0], parts[1]);
-    for part in &parts[2..] {
-        result.push_str(&format!("\n{pad}{INDENT}{part}"));
+    if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
+        let mut result = format!("{pad}<?= {prefix}\n");
+        for (i, arg) in args.iter().enumerate() {
+            if i < args.len() - 1 {
+                result.push_str(&format!("{pad}{INDENT}{arg},\n"));
+            } else {
+                result.push_str(&format!("{pad}{INDENT}{arg}\n"));
+            }
+        }
+        result.push_str(&format!("{pad}{suffix} ?>\n"));
+        return result;
     }
-    result.push_str(" ?>");
-    result.push('\n');
-    result
+
+    format!("{single}\n")
 }
 
 fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
@@ -176,7 +294,8 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 }
             }
             Node::PhpBlock(code) => {
-                if code.contains('\n') {
+                let is_multiline = code.contains('\n') || code.chars().filter(|&c| c == ';').count() > 1;
+                if is_multiline {
                     output.push_str(&format!("{pad}<?php\n"));
                     output.push_str(&reindent_php_block(code, &pad));
                     output.push_str(&format!("{pad}?>\n"));
