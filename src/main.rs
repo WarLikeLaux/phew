@@ -8,6 +8,9 @@ struct Cli {
     #[arg(help = "Files or directories to format")]
     paths: Vec<String>,
 
+    #[arg(short, long, help = "Write result back to file")]
+    write: bool,
+
     #[arg(long, help = "Show tokens instead of formatting")]
     tokens: bool,
 
@@ -80,7 +83,14 @@ fn main() {
             print_tree(&nodes, 0);
         } else {
             let nodes = ast::parse(tokens);
-            print!("{}", phrust::formatter::engine::format(&nodes));
+            let formatted = phrust::formatter::engine::format(&nodes);
+            if cli.write {
+                if let Err(e) = std::fs::write(path, &formatted) {
+                    eprintln!("Error writing {path}: {e}");
+                }
+            } else {
+                print!("{formatted}");
+            }
         }
     }
 }

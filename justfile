@@ -22,6 +22,9 @@ build:
 run *args:
     cargo run -- {{args}}
 
+fix *args:
+    cargo run -- -w {{args}}
+
 clean:
     cargo clean
 
