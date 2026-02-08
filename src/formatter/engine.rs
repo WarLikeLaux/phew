@@ -462,12 +462,8 @@ fn format_echo(code: &str, pad: &str) -> String {
 
     if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
         let mut result = format!("{pad}<?= {prefix}\n");
-        for (i, arg) in args.iter().enumerate() {
-            if i < args.len() - 1 {
-                result.push_str(&format!("{pad}{INDENT}{arg},\n"));
-            } else {
-                result.push_str(&format!("{pad}{INDENT}{arg}\n"));
-            }
+        for arg in &args {
+            result.push_str(&format!("{pad}{INDENT}{arg},\n"));
         }
         result.push_str(&format!("{pad}{suffix} ?>\n"));
         return result;
