@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mkdir -p tests/fixtures/expected
+
+for input in tests/fixtures/input/*; do
+    name=$(basename "$input")
+    echo "Updating $name..."
+    cargo run -q -- "$input" > "tests/fixtures/expected/$name"
+done
+
+echo "✅ All fixtures updated!"

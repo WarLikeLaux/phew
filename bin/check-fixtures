@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 
 DIR="tests/fixtures"
 PASS=0
@@ -16,21 +16,36 @@ for input in "$DIR"/input/*; do
         continue
     fi
 
-    actual=$(cargo run -q -- "$input")
-    if diff -q <(echo "$actual") "$expected" > /dev/null 2>&1; then
+    actual_file="/tmp/phrust_actual_$name"
+    err_file="/tmp/phrust_err_$name"
+    
+    cargo run -q -- "$input" > "$actual_file" 2> "$err_file"
+    exit_code=$?
+
+    if [ "$exit_code" -ne 0 ]; then
+        err_msg=$(cat "$err_file")
+        ERRORS+="  ✗ $name (CRASH exit code $exit_code)\n"
+        echo -e "\n--- ERROR: $name crashed ---\n$err_msg\n"
+        FAIL=$((FAIL + 1))
+        continue
+    fi
+
+    if diff -q "$actual_file" "$expected" > /dev/null 2>&1; then
         PASS=$((PASS + 1))
     else
         ERRORS+="  ✗ $name\n"
-        diff --color <(echo "$actual") "$expected" || true
+        diff --color "$actual_file" "$expected" || true
         FAIL=$((FAIL + 1))
     fi
 done
 
-echo ""
-if [ $FAIL -eq 0 ]; then
-    echo "✅ all $PASS fixtures passed"
-else
-    echo -e "$ERRORS"
-    echo "❌ $FAIL failed, $PASS passed"
+echo -e "\nResults:"
+echo "  Passed: $PASS"
+echo "  Failed: $FAIL"
+
+if [ $FAIL -gt 0 ]; then
+    echo -e "\nErrors:\n$ERRORS"
     exit 1
 fi
+
+echo -e "\n✅ All fixtures passed!"

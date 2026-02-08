@@ -2,6 +2,7 @@
 name = "phrust"
 version = "0.3.1"
 edition = "2024"
+rust-version = "1.85"
 description = "Fast HTML + PHP formatter for Yii 2 view files"
 license = "MIT"
 repository = "https://github.com/WarLikeLaux/phrust"

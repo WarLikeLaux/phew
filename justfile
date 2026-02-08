@@ -36,3 +36,9 @@ d chars="15000":
 
 dc:
     git diff --staged
+
+review-fetch *args:
+    @node scripts/fetch-pr-comments.mjs {{args}}
+
+review-resolve:
+    @node scripts/resolve-pr-threads.mjs
