@@ -10,7 +10,7 @@
     <div class="form-group">
         <?= Html::submitButton(
             isset($book) ? Yii::t('app', 'ui.save') : Yii::t('app', 'ui.create'),
-            ['class' => 'btn btn-success']
+            ['class' => 'btn btn-success'],
         ) ?>
     </div>
     <?php ActiveForm::end(); ?>

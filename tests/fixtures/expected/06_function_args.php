@@ -2,11 +2,11 @@
     <?= Html::a(
         '<i class="bi bi-plus"></i>Create',
         'create',
-        ['class' => 'btn btn-success', 'data-method' => 'post', 'data-confirm' => 'Are you sure?']
+        ['class' => 'btn btn-success', 'data-method' => 'post', 'data-confirm' => 'Are you sure?'],
     ) ?>
     <?= Html::a(
         '<i class="bi bi-trash"></i>Delete',
         ['delete', 'id' => $model->id],
-        ['class' => 'btn btn-danger', 'data-method' => 'post', 'data-confirm' => Yii::t('app', 'ui.confirm_delete')]
+        ['class' => 'btn btn-danger', 'data-method' => 'post', 'data-confirm' => Yii::t('app', 'ui.confirm_delete')],
     ) ?>
 </div>
