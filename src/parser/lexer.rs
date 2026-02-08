@@ -143,7 +143,12 @@ fn consume_php_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> St
         content.push(c);
         chars.next();
     }
-    content.trim().to_string()
+    let trimmed = content.trim_end().to_string();
+    if trimmed.contains('\n') {
+        trimmed.strip_prefix('\n').unwrap_or(&trimmed).to_string()
+    } else {
+        trimmed.trim().to_string()
+    }
 }
 
 fn consume_php_tag_prefix(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
@@ -204,14 +209,26 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             }
 
             let mut tag_buf = String::new();
+            let mut in_quote: Option<char> = None;
 
             while let Some(&c) = chars.peek() {
-                if c == '>' {
+                if let Some(q) = in_quote {
+                    tag_buf.push(c);
+                    chars.next();
+                    if c == q {
+                        in_quote = None;
+                    }
+                } else if c == '"' || c == '\'' {
+                    in_quote = Some(c);
+                    tag_buf.push(c);
+                    chars.next();
+                } else if c == '>' {
                     chars.next();
                     break;
+                } else {
+                    tag_buf.push(c);
+                    chars.next();
                 }
-                tag_buf.push(c);
-                chars.next();
             }
 
             tokens.push(parse_tag(&tag_buf));
