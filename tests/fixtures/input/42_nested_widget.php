@@ -1,12 +1,1 @@
-<?php
-use yii\bootstrap5\Modal;
-?>
-<div class="page">
-<?php Modal::begin(['id' => 'outer-modal', 'title' => 'Outer']); ?>
-<div class="outer-body">
-<?php Modal::begin(['id' => 'inner-modal', 'title' => 'Inner']); ?>
-<p>Inner content</p>
-<?php Modal::end(); ?>
-</div>
-<?php Modal::end(); ?>
-</div>
+<?php use yii\bootstrap5\Modal; ?> <div class="page"> <?php Modal::begin(['id' => 'outer-modal', 'title' => 'Outer']); ?> <div class="outer-body"> <?php Modal::begin(['id' => 'inner-modal', 'title' => 'Inner']); ?> <p>Inner content</p> <?php Modal::end(); ?> </div> <?php Modal::end(); ?> </div>

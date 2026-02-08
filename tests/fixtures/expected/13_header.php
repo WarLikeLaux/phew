@@ -7,7 +7,6 @@ $this->title = 'Create';
 $this->params['breadcrumbs'][] = $this->title;
 
 ?>
-
 <div class="author-form">
     <?= $form->field($model, 'fio') ?>
 </div>

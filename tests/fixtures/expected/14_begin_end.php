@@ -13,7 +13,6 @@ declare(strict_types=1);
 use yii\helpers\Html;
 
 ?>
-
 <?= Html::beginTag('div', $options) ?>
     <?= $header ?>
     <ul class="mb-0">
