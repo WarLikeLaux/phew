@@ -14,70 +14,74 @@ pub enum Token {
     PhpEcho(String),
 }
 
+fn skip_whitespace(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
+    while let Some(&c) = chars.peek() {
+        if !c.is_whitespace() {
+            break;
+        }
+        chars.next();
+    }
+}
+
+fn consume_attr_name(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let mut name = String::new();
+    while let Some(&c) = chars.peek() {
+        if c == '=' || c.is_whitespace() {
+            break;
+        }
+        name.push(c);
+        chars.next();
+    }
+    name
+}
+
+fn consume_attr_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
+    let mut value = String::new();
+
+    if let Some(&quote) = chars.peek()
+        && (quote == '"' || quote == '\'')
+    {
+        chars.next();
+        while let Some(&c) = chars.peek() {
+            if c == quote {
+                chars.next();
+                break;
+            }
+            value.push(c);
+            chars.next();
+        }
+        return value;
+    }
+
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() {
+            break;
+        }
+        value.push(c);
+        chars.next();
+    }
+
+    value
+}
+
 fn parse_attributes(raw: &str) -> Vec<Attribute> {
     let mut attrs = Vec::new();
     let mut chars = raw.chars().peekable();
 
-    while let Some(&ch) = chars.peek() {
-        if ch.is_whitespace() {
-            chars.next();
-            continue;
-        }
-
-        let mut name = String::new();
-        while let Some(&c) = chars.peek() {
-            if c == '=' || c.is_whitespace() {
-                break;
-            }
-            name.push(c);
-            chars.next();
-        }
+    loop {
+        skip_whitespace(&mut chars);
+        let name = consume_attr_name(&mut chars);
 
         if name.is_empty() {
             break;
         }
 
-        while let Some(&c) = chars.peek() {
-            if !c.is_whitespace() {
-                break;
-            }
-            chars.next();
-        }
+        skip_whitespace(&mut chars);
 
         if chars.peek() == Some(&'=') {
             chars.next();
-
-            while let Some(&c) = chars.peek() {
-                if !c.is_whitespace() {
-                    break;
-                }
-                chars.next();
-            }
-
-            let mut value = String::new();
-
-            if let Some(&quote) = chars.peek() {
-                if quote == '"' || quote == '\'' {
-                    chars.next();
-                    while let Some(&c) = chars.peek() {
-                        if c == quote {
-                            chars.next();
-                            break;
-                        }
-                        value.push(c);
-                        chars.next();
-                    }
-                } else {
-                    while let Some(&c) = chars.peek() {
-                        if c.is_whitespace() {
-                            break;
-                        }
-                        value.push(c);
-                        chars.next();
-                    }
-                }
-            }
-
+            skip_whitespace(&mut chars);
+            let value = consume_attr_value(&mut chars);
             attrs.push(Attribute {
                 name,
                 value: Some(value),
@@ -142,6 +146,18 @@ fn consume_php_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> St
     content.trim().to_string()
 }
 
+fn consume_php_tag_prefix(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> bool {
+    if chars.peek() != Some(&'h') {
+        return false;
+    }
+    chars.next();
+    if chars.peek() != Some(&'p') {
+        return false;
+    }
+    chars.next();
+    true
+}
+
 fn try_consume_php(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Option<Token> {
     if chars.peek() != Some(&'?') {
         return None;
@@ -156,18 +172,11 @@ fn try_consume_php(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> Opti
         }
         Some(&'p') => {
             chars.next();
-            if chars.peek() == Some(&'h') {
-                chars.next();
-                if chars.peek() == Some(&'p') {
-                    chars.next();
-                    let content = consume_php_block(chars);
-                    Some(Token::PhpBlock(content))
-                } else {
-                    None
-                }
-            } else {
-                None
+            if !consume_php_tag_prefix(chars) {
+                return None;
             }
+            let content = consume_php_block(chars);
+            Some(Token::PhpBlock(content))
         }
         _ => None,
     }
