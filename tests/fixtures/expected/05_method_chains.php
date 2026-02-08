@@ -1,0 +1,2 @@
+<div class="form-group"><?= $form->field($model, 'username')->textInput(['maxlength' => true])->label('Username')->hint('Enter your login') ?></div>
+<div class="form-group"><?= $form->field($model, 'email')->textInput(['type' => 'email'])->label('E-mail')->withValidator('email') ?></div>
