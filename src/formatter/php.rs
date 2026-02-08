@@ -210,6 +210,56 @@ pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
     Some((prefix, args, suffix))
 }
 
+pub fn split_by_commas(code: &str) -> Vec<String> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut items = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0i32;
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            current.push(ch);
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+                if i < len {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+            }
+            if i < len {
+                current.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+        } else if ch == ',' && depth == 0 {
+            items.push(current.trim().to_string());
+            current = String::new();
+            i += 1;
+            continue;
+        }
+        current.push(ch);
+        i += 1;
+    }
+
+    if !current.trim().is_empty() {
+        items.push(current.trim().to_string());
+    }
+
+    items
+}
+
 fn skip_string_literal(chars: &[char], start: usize, result: &mut String) -> usize {
     let quote = chars[start];
     let len = chars.len();

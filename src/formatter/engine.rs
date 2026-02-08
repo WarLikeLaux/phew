@@ -1,4 +1,4 @@
-use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain};
+use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_commas};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
@@ -207,8 +207,11 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         let leading = count_leading_closers(&formatted) as i32;
         let write_depth = (depth - leading).max(0) as usize;
         let inner_pad = INDENT.repeat(write_depth);
+        let base_pad = format!("{pad}{inner_pad}");
 
-        if formatted.starts_with('*') {
+        if let Some(split) = try_split_long_line(&formatted, &base_pad) {
+            result.push_str(&split);
+        } else if formatted.starts_with('*') {
             result.push_str(&format!("{pad}{inner_pad} {formatted}\n"));
         } else {
             result.push_str(&format!("{pad}{inner_pad}{formatted}\n"));
@@ -220,6 +223,71 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         depth = depth.max(0);
     }
 
+    result
+}
+
+fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
+    if base_pad.len() + formatted.len() <= MAX_LINE_LENGTH {
+        return None;
+    }
+
+    if let Some((prefix, args, suffix)) = split_by_args(formatted) {
+        return Some(build_split(&prefix, &args, &suffix, base_pad));
+    }
+
+    let chars: Vec<char> = formatted.chars().collect();
+    let len = chars.len();
+    let open_pos = chars.iter().position(|&c| c == '(')?;
+
+    let mut depth = 0i32;
+    let mut close_pos = None;
+    let mut i = open_pos;
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if matches!(ch, '(' | '[') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']') {
+            depth -= 1;
+            if depth == 0 {
+                close_pos = Some(i);
+                break;
+            }
+        }
+        i += 1;
+    }
+
+    let close_pos = close_pos?;
+    let inner: String = chars[open_pos + 1..close_pos].iter().collect();
+    let inner = inner.trim();
+
+    if let Some(array_inner) = inner.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let items = split_by_commas(array_inner);
+        if items.len() > 1 {
+            let prefix: String = chars[..=open_pos].iter().collect();
+            let suffix: String = chars[close_pos..].iter().collect();
+            let new_prefix = format!("{prefix}[");
+            let new_suffix = format!("]{suffix}");
+            return Some(build_split(&new_prefix, &items, &new_suffix, base_pad));
+        }
+    }
+
+    None
+}
+
+fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String {
+    let mut result = format!("{pad}{prefix}\n");
+    for arg in args {
+        result.push_str(&format!("{pad}{INDENT}{arg},\n"));
+    }
+    result.push_str(&format!("{pad}{suffix}\n"));
     result
 }
 
@@ -256,6 +324,10 @@ fn format_echo(code: &str, pad: &str) -> String {
         return result;
     }
 
+    if let Some(split) = try_split_long_line(&formatted, pad) {
+        return format!("{}<?= ", pad) + split.trim_start() + " ?>\n";
+    }
+
     format!("{single}\n")
 }
 
@@ -276,9 +348,17 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 if children.is_empty() && is_void_element(name) {
                     output.push_str(&format!("{pad}<{name}{attrs} />\n"));
                 } else if is_inline_content(children) {
-                    output.push_str(&pad);
-                    output.push_str(&format_inline(name, attributes, children));
-                    output.push('\n');
+                    let inline = format_inline(name, attributes, children);
+                    if pad.len() + inline.len() <= MAX_LINE_LENGTH {
+                        output.push_str(&pad);
+                        output.push_str(&inline);
+                        output.push('\n');
+                    } else {
+                        let attrs = format_attributes(attributes);
+                        output.push_str(&format!("{pad}<{name}{attrs}>\n"));
+                        format_nodes(children, current_depth + 1, output);
+                        output.push_str(&format!("{pad}</{name}>\n"));
+                    }
                 } else {
                     output.push_str(&format!("{pad}<{name}{attrs}>\n"));
                     format_nodes(children, current_depth + 1, output);
@@ -306,7 +386,14 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                         let pad_less = INDENT.repeat(current_depth);
                         output.push_str(&format!("{pad_less}<?php {formatted} ?>\n"));
                     } else {
-                        output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
+                        let single = format!("{pad}<?php {formatted} ?>");
+                        if single.len() <= MAX_LINE_LENGTH {
+                            output.push_str(&format!("{single}\n"));
+                        } else {
+                            output.push_str(&format!("{pad}<?php\n"));
+                            output.push_str(&reindent_php_block(code, &pad));
+                            output.push_str(&format!("{pad}?>\n"));
+                        }
                         if is_php_block_opener(code) {
                             current_depth += 1;
                         }
