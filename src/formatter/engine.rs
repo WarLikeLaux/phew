@@ -578,6 +578,9 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                         current_depth = current_depth.saturating_sub(1);
                         let pad_less = INDENT.repeat(current_depth);
                         output.push_str(&format!("{pad_less}<?php {formatted} ?>\n"));
+                        if is_php_block_opener(code) {
+                            current_depth += 1;
+                        }
                     } else {
                         let single = format!("{pad}<?php {formatted} ?>");
                         if single.len() <= MAX_LINE_LENGTH {
