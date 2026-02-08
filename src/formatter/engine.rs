@@ -9,11 +9,41 @@ const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
 ];
 
-const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style"];
+const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style", "textarea"];
+
+fn contains_outside_strings(code: &str, needle: &str) -> bool {
+    let bytes = code.as_bytes();
+    let needle_bytes = needle.as_bytes();
+    let len = bytes.len();
+    let nlen = needle_bytes.len();
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'\'' || bytes[i] == b'"' {
+            let q = bytes[i];
+            i += 1;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+        if i + nlen <= len && &bytes[i..i + nlen] == needle_bytes {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
 
 fn has_switch_case(code: &str) -> bool {
     let lower = code.to_lowercase();
-    (lower.contains("switch") || lower.contains("break")) && (lower.contains("case ") || lower.contains("default:"))
+    (lower.contains("switch") || contains_outside_strings(&lower, "break"))
+        && (lower.contains("case ") || lower.contains("default:"))
 }
 
 fn is_php_block_opener(code: &str) -> bool {
@@ -31,7 +61,7 @@ fn is_php_block_closer(code: &str) -> bool {
         || lower.starts_with("else")
         || lower.starts_with("elseif")
         || lower.starts_with('}')
-        || lower.contains("break;")
+        || contains_outside_strings(&lower, "break;")
         || lower.starts_with("case ")
         || lower.starts_with("default:")
         || lower.contains("::end(")
@@ -635,7 +665,12 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
                 let trimmed = s.trim_start_matches('\n').trim_end();
                 if !trimmed.is_empty() {
                     for line in trimmed.lines() {
-                        output.push_str(line);
+                        if line.chars().next().is_some_and(char::is_whitespace) {
+                            output.push_str(line);
+                        } else {
+                            output.push_str(&pad);
+                            output.push_str(line);
+                        }
                         output.push('\n');
                     }
                 }
@@ -684,7 +719,7 @@ fn emit_switch_stmt(trimmed: &str, state: &mut PhpDepthState, output: &mut Strin
         let pad = INDENT.repeat(lvl);
         output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
         state.depth = lvl;
-    } else if lower.contains("break;") {
+    } else if contains_outside_strings(&lower, "break;") {
         let pad = INDENT.repeat(state.depth);
         output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
     } else {
@@ -754,7 +789,7 @@ fn emit_single_php(code: &str, pad: &str, state: &mut PhpDepthState, output: &mu
         let stmt_pad = INDENT.repeat(lvl);
         output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
         state.depth = lvl;
-    } else if !state.switch_stack.is_empty() && lower.contains("break;") {
+    } else if !state.switch_stack.is_empty() && contains_outside_strings(&lower, "break;") {
         let stmt_pad = INDENT.repeat(state.depth);
         output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
     } else if is_php_block_closer(code) {
