@@ -1,8 +1,9 @@
-use super::php::format_php_code;
+use super::php::{format_php_code, join_php_lines, split_by_chain};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
 const INDENT: &str = "    ";
+const MAX_LINE_LENGTH: usize = 120;
 
 const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
@@ -59,6 +60,52 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
     format!("<{name}{attrs}>{content}</{name}>")
 }
 
+fn min_indentation(code: &str) -> usize {
+    code.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0)
+}
+
+fn reindent_php_block(code: &str, pad: &str) -> String {
+    let base_indent = min_indentation(code);
+    let mut result = String::new();
+    for line in code.lines() {
+        if line.trim().is_empty() {
+            result.push('\n');
+        } else {
+            let stripped = &line[base_indent.min(line.len())..];
+            let content = format_php_code(stripped);
+            result.push_str(&format!("{pad}{content}\n"));
+        }
+    }
+    result
+}
+
+fn format_echo(code: &str, pad: &str) -> String {
+    let joined = join_php_lines(code);
+    let formatted = format_php_code(&joined);
+    let single = format!("{pad}<?= {formatted} ?>");
+
+    if single.len() <= MAX_LINE_LENGTH {
+        return format!("{single}\n");
+    }
+
+    let parts = split_by_chain(&formatted);
+    if parts.len() <= 2 {
+        return format!("{single}\n");
+    }
+
+    let mut result = format!("{pad}<?= {}{}", parts[0], parts[1]);
+    for part in &parts[2..] {
+        result.push_str(&format!("\n{pad}{INDENT}{part}"));
+    }
+    result.push_str(" ?>");
+    result.push('\n');
+    result
+}
+
 fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
     let mut current_depth = depth;
 
@@ -89,24 +136,31 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 let trimmed = s.trim();
                 if !trimmed.is_empty() {
                     output.push_str(&format!("{pad}{trimmed}\n"));
+                } else if s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1 {
+                    output.push('\n');
                 }
             }
             Node::PhpBlock(code) => {
-                let formatted = format_php_code(code);
-                if is_php_block_closer(code) {
-                    current_depth = current_depth.saturating_sub(1);
-                    let pad_less = INDENT.repeat(current_depth);
-                    output.push_str(&format!("{pad_less}<?php {formatted} ?>\n"));
+                if code.contains('\n') {
+                    output.push_str(&format!("{pad}<?php\n"));
+                    output.push_str(&reindent_php_block(code, &pad));
+                    output.push_str(&format!("{pad}?>\n"));
                 } else {
-                    output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
-                    if is_php_block_opener(code) {
-                        current_depth += 1;
+                    let formatted = format_php_code(code);
+                    if is_php_block_closer(code) {
+                        current_depth = current_depth.saturating_sub(1);
+                        let pad_less = INDENT.repeat(current_depth);
+                        output.push_str(&format!("{pad_less}<?php {formatted} ?>\n"));
+                    } else {
+                        output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
+                        if is_php_block_opener(code) {
+                            current_depth += 1;
+                        }
                     }
                 }
             }
             Node::PhpEcho(code) => {
-                let formatted = format_php_code(code);
-                output.push_str(&format!("{pad}<?= {formatted} ?>\n"));
+                output.push_str(&format_echo(code, &pad));
             }
         }
     }
