@@ -200,6 +200,7 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
     let mut first_content = true;
     let mut prev_was_doc_close = false;
     let mut prev_was_use = false;
+    let mut prev_was_declare = false;
     let is_header = is_header_php_block(&code);
 
     for line in code.lines() {
@@ -218,7 +219,9 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         first_content = false;
 
         let is_use_import = trimmed.starts_with("use ");
-        if prev_was_use && !is_use_import && !prev_blank {
+        let is_declare = trimmed.starts_with("declare(");
+
+        if (prev_was_use && !is_use_import && !prev_blank) || (prev_was_declare && !is_declare && !prev_blank) {
             result.push('\n');
         }
 
@@ -229,6 +232,7 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         prev_blank = false;
         prev_was_doc_close = trimmed == "*/";
         prev_was_use = is_use_import;
+        prev_was_declare = is_declare;
 
         let formatted = format_php_code(trimmed);
         let leading = count_leading_closers(&formatted) as i32;
@@ -279,9 +283,9 @@ fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
                 }
                 i += 1;
             }
-        } else if matches!(ch, '(' | '[') {
+        } else if matches!(ch, '(' | '[' | '{') {
             depth += 1;
-        } else if matches!(ch, ')' | ']') {
+        } else if matches!(ch, ')' | ']' | '}') {
             depth -= 1;
             if depth == 0 {
                 close_pos = Some(i);
@@ -306,6 +310,10 @@ fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
         }
     }
 
+    if let Some(expanded) = expand_nested_array(formatted, base_pad) {
+        return Some(expanded);
+    }
+
     None
 }
 
@@ -326,7 +334,7 @@ fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String
         }
         result.push_str(&format!("{inner_pad}{arg},\n"));
     }
-    result.push_str(&format!("{pad}{suffix}\n"));
+    result.push_str(&format!("{pad}{suffix}"));
     result
 }
 
@@ -344,11 +352,11 @@ fn expand_bare_array(arg: &str, pad: &str) -> Option<String> {
     let mut result = format!("{pad}[\n");
     for item in &items {
         let item_line_len = nested_pad.len() + item.len() + 1;
-        if item_line_len > MAX_LINE_LENGTH
-            && let Some(expanded) = expand_nested_array(item, &nested_pad)
-        {
-            result.push_str(&expanded);
-            continue;
+        if item_line_len > MAX_LINE_LENGTH {
+            if let Some(expanded) = expand_nested_array(item, &nested_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
         }
         if item.starts_with('[') && item.ends_with(']') {
             let sub_inner = &item[1..item.len() - 1];
@@ -389,10 +397,10 @@ fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
     }
 
     let rest = &arg[i..];
-    let arrow_in_rest = rest.find(" => ")?;
-    let value_start = i + arrow_in_rest + 4;
+    let arrow_pos = rest.find("=>")?;
+    let value_raw = &rest[arrow_pos + 2..];
+    let value = value_raw.trim();
 
-    let value = arg[value_start..].trim();
     if !value.starts_with('[') || !value.ends_with(']') {
         return None;
     }
@@ -403,16 +411,16 @@ fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
         return None;
     }
 
-    let key = &arg[..value_start];
+    let key = &arg[..i + arrow_pos + 2];
     let nested_pad = format!("{pad}{INDENT}");
-    let mut result = format!("{pad}{key}[\n");
+    let mut result = format!("{pad}{key} [\n");
     for item in &items {
         let item_line_len = nested_pad.len() + item.len() + 1;
-        if item_line_len > MAX_LINE_LENGTH
-            && let Some(expanded) = expand_nested_array(item, &nested_pad)
-        {
-            result.push_str(&expanded);
-            continue;
+        if item_line_len > MAX_LINE_LENGTH {
+            if let Some(expanded) = expand_nested_array(item, &nested_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
         }
         if item.starts_with('[') && item.ends_with(']') {
             let sub_inner = &item[1..item.len() - 1];
@@ -436,7 +444,8 @@ fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
 fn format_echo(code: &str, pad: &str) -> String {
     let joined = join_php_lines(code);
     let formatted = format_php_code(&joined);
-    let single = format!("{pad}<?= {formatted} ?>");
+    let combined = format!("{formatted} ?>");
+    let single = format!("{pad}<?= {combined}");
 
     if single.len() <= MAX_LINE_LENGTH {
         return format!("{single}\n");
@@ -448,22 +457,20 @@ fn format_echo(code: &str, pad: &str) -> String {
         let mut result = format!("{pad}<?= {}{}", parts[0], parts[1]);
         for part in &parts[2..] {
             let part_line_len = chain_pad.len() + part.len();
-            if part_line_len > MAX_LINE_LENGTH
-                && let Some(split) = try_split_long_line(part, &chain_pad)
-            {
-                let split_content = split.trim_start();
-                result.push_str(&format!("\n{chain_pad}{split_content}"));
-                continue;
+            if part_line_len > MAX_LINE_LENGTH {
+                if let Some(split) = try_split_long_line(part, &chain_pad) {
+                    let split_content = split.trim_start();
+                    result.push_str(&format!("\n{chain_pad}{split_content}"));
+                    continue;
+                }
             }
             result.push_str(&format!("\n{chain_pad}{part}"));
         }
-        result.push_str(" ?>");
-        result.push('\n');
+        result.push_str(" ?>\n");
         return result;
     }
 
     if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
-        // Smart inline: keep short args inline, expand only the last array arg
         if args.len() >= 2 {
             let last = &args[args.len() - 1];
             if last.starts_with('[') && last.ends_with(']') {
@@ -478,11 +485,11 @@ fn format_echo(code: &str, pad: &str) -> String {
                         let mut result = format!("{pad}<?= {prefix}{inline_joined}, [\n");
                         for item in &items {
                             let item_line_len = inner_pad.len() + item.len() + 1;
-                            if item_line_len > MAX_LINE_LENGTH
-                                && let Some(expanded) = expand_nested_array(item, &inner_pad)
-                            {
-                                result.push_str(&expanded);
-                                continue;
+                            if item_line_len > MAX_LINE_LENGTH {
+                                if let Some(expanded) = expand_nested_array(item, &inner_pad) {
+                                    result.push_str(&expanded);
+                                    continue;
+                                }
                             }
                             result.push_str(&format!("{inner_pad}{item},\n"));
                         }
@@ -493,7 +500,6 @@ fn format_echo(code: &str, pad: &str) -> String {
             }
         }
 
-        // Full split: each arg on its own line
         let mut result = format!("{pad}<?= {prefix}\n");
         for arg in &args {
             result.push_str(&format!("{pad}{INDENT}{arg},\n"));

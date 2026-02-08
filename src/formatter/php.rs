@@ -125,7 +125,26 @@ pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
 
-    let open_pos = chars.iter().position(|&c| c == '(')?;
+    let mut open_pos = None;
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if ch == '(' {
+            open_pos = Some(i);
+            break;
+        }
+        i += 1;
+    }
+
+    let open_pos = open_pos?;
 
     let mut depth = 0i32;
     let mut close_pos = None;
@@ -140,9 +159,9 @@ pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
                 }
                 i += 1;
             }
-        } else if matches!(ch, '(' | '[') {
+        } else if matches!(ch, '(' | '[' | '{') {
             depth += 1;
-        } else if matches!(ch, ')' | ']') {
+        } else if matches!(ch, ')' | ']' | '}') {
             depth -= 1;
             if depth == 0 {
                 close_pos = Some(i);
