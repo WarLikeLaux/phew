@@ -19,8 +19,10 @@ fn is_php_block_closer(code: &str) -> bool {
         || lower.starts_with("endforeach")
         || lower.starts_with("endfor")
         || lower.starts_with("endwhile")
+        || lower.starts_with("endswitch")
         || lower.starts_with("else")
         || lower.starts_with("elseif")
+        || (lower.contains("break;") && lower.ends_with(':'))
 }
 
 fn is_echo_block_opener(code: &str) -> bool {
