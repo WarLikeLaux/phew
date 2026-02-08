@@ -13,6 +13,7 @@ use yii\widgets\ActiveForm;
 $this->title = $title;
 $this->params['breadcrumbs'][] = ['label' => 'Users', 'url' => ['index']];
 $this->params['breadcrumbs'][] = $this->title;
+
 ?>
 <div class="user-update">
     <h1><?= Html::encode($this->title) ?></h1>
