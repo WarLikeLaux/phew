@@ -70,6 +70,31 @@ fn parse_attributes(raw: &str) -> Vec<Attribute> {
 
     loop {
         skip_whitespace(&mut chars);
+
+        if chars.peek() == Some(&'<') {
+            let mut lookahead = chars.clone();
+            lookahead.next();
+            if lookahead.peek() == Some(&'?') {
+                let mut php_buf = String::from("<?");
+                chars.next(); // <
+                chars.next(); // ?
+                while let Some(&c) = chars.peek() {
+                    php_buf.push(c);
+                    chars.next();
+                    if c == '?' && chars.peek() == Some(&'>') {
+                        php_buf.push('>');
+                        chars.next();
+                        break;
+                    }
+                }
+                attrs.push(Attribute {
+                    name: php_buf,
+                    value: None,
+                });
+                continue;
+            }
+        }
+
         let name = consume_attr_name(&mut chars);
 
         if name.is_empty() {
@@ -213,10 +238,48 @@ pub fn tokenize(input: &str) -> Vec<Token> {
 
             while let Some(&c) = chars.peek() {
                 if let Some(q) = in_quote {
-                    tag_buf.push(c);
+                    if c == '<' {
+                        chars.next();
+                        if chars.peek() == Some(&'?') {
+                            tag_buf.push('<');
+                            tag_buf.push('?');
+                            chars.next();
+                            while let Some(&pc) = chars.peek() {
+                                tag_buf.push(pc);
+                                chars.next();
+                                if pc == '?' && chars.peek() == Some(&'>') {
+                                    tag_buf.push('>');
+                                    chars.next();
+                                    break;
+                                }
+                            }
+                        } else {
+                            tag_buf.push('<');
+                        }
+                    } else {
+                        tag_buf.push(c);
+                        chars.next();
+                        if c == q {
+                            in_quote = None;
+                        }
+                    }
+                } else if c == '<' {
                     chars.next();
-                    if c == q {
-                        in_quote = None;
+                    if chars.peek() == Some(&'?') {
+                        tag_buf.push('<');
+                        tag_buf.push('?');
+                        chars.next();
+                        while let Some(&pc) = chars.peek() {
+                            tag_buf.push(pc);
+                            chars.next();
+                            if pc == '?' && chars.peek() == Some(&'>') {
+                                tag_buf.push('>');
+                                chars.next();
+                                break;
+                            }
+                        }
+                    } else {
+                        tag_buf.push('<');
                     }
                 } else if c == '"' || c == '\'' {
                     in_quote = Some(c);
