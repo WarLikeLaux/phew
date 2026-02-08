@@ -312,16 +312,59 @@ fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String
     let mut result = format!("{pad}{prefix}\n");
     for arg in args {
         let line_len = inner_pad.len() + arg.len() + 1;
-        if line_len > MAX_LINE_LENGTH
-            && let Some(expanded) = expand_nested_array(arg, &inner_pad)
-        {
-            result.push_str(&expanded);
-            continue;
+        if line_len > MAX_LINE_LENGTH {
+            if let Some(expanded) = expand_nested_array(arg, &inner_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(expanded) = expand_bare_array(arg, &inner_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
         }
         result.push_str(&format!("{inner_pad}{arg},\n"));
     }
     result.push_str(&format!("{pad}{suffix}\n"));
     result
+}
+
+fn expand_bare_array(arg: &str, pad: &str) -> Option<String> {
+    let trimmed = arg.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return None;
+    }
+    let inner = &trimmed[1..trimmed.len() - 1];
+    let items = split_by_commas(inner);
+    if items.len() <= 1 {
+        return None;
+    }
+    let nested_pad = format!("{pad}{INDENT}");
+    let mut result = format!("{pad}[\n");
+    for item in &items {
+        let item_line_len = nested_pad.len() + item.len() + 1;
+        if item_line_len > MAX_LINE_LENGTH
+            && let Some(expanded) = expand_nested_array(item, &nested_pad)
+        {
+            result.push_str(&expanded);
+            continue;
+        }
+        if item.starts_with('[') && item.ends_with(']') {
+            let sub_inner = &item[1..item.len() - 1];
+            let sub_items = split_by_commas(sub_inner);
+            if sub_items.len() > 1 {
+                let deeper_pad = format!("{nested_pad}{INDENT}");
+                result.push_str(&format!("{nested_pad}[\n"));
+                for sub in &sub_items {
+                    result.push_str(&format!("{deeper_pad}{sub},\n"));
+                }
+                result.push_str(&format!("{nested_pad}],\n"));
+                continue;
+            }
+        }
+        result.push_str(&format!("{nested_pad}{item},\n"));
+    }
+    result.push_str(&format!("{pad}],\n"));
+    Some(result)
 }
 
 fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
@@ -362,6 +405,13 @@ fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
     let nested_pad = format!("{pad}{INDENT}");
     let mut result = format!("{pad}{key}[\n");
     for item in &items {
+        let item_line_len = nested_pad.len() + item.len() + 1;
+        if item_line_len > MAX_LINE_LENGTH
+            && let Some(expanded) = expand_nested_array(item, &nested_pad)
+        {
+            result.push_str(&expanded);
+            continue;
+        }
         if item.starts_with('[') && item.ends_with(']') {
             let sub_inner = &item[1..item.len() - 1];
             let sub_items = split_by_commas(sub_inner);
@@ -392,9 +442,18 @@ fn format_echo(code: &str, pad: &str) -> String {
 
     let parts = split_by_chain(&formatted);
     if parts.len() > 2 {
+        let chain_pad = format!("{pad}{INDENT}");
         let mut result = format!("{pad}<?= {}{}", parts[0], parts[1]);
         for part in &parts[2..] {
-            result.push_str(&format!("\n{pad}{INDENT}{part}"));
+            let part_line_len = chain_pad.len() + part.len();
+            if part_line_len > MAX_LINE_LENGTH
+                && let Some(split) = try_split_long_line(part, &chain_pad)
+            {
+                let split_content = split.trim_start();
+                result.push_str(&format!("\n{chain_pad}{split_content}"));
+                continue;
+            }
+            result.push_str(&format!("\n{chain_pad}{part}"));
         }
         result.push_str(" ?>");
         result.push('\n');
