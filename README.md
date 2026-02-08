@@ -1,17 +1,28 @@
+<div align="center">
+<img src="docs/hero.png" alt="phrust — fast HTML + PHP formatter for Yii 2 views" width="800">
+
+# phrust
+
+**⚡ Быстрый форматтер HTML + PHP для view-файлов Yii 2 • Rust 2024 Edition**
+
+[![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phrust/actions)
+[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)]()
+[![Tests](https://img.shields.io/badge/Tests-44_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-28_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.3.1-orange?style=for-the-badge&logo=semver&logoColor=white)]()
+
+---
+
 <p align="center">
-  <img src="docs/hero.png" alt="phrust — fast HTML + PHP formatter" width="100%">
+  <b>🔍 Lexer + AST Parser</b> • <b>🎨 HTML + PHP Formatting</b> • <b>🔀 Smart Line Splitting</b><br>
+  <b>🏗 Yii 2 Widgets</b> • <b>📁 Recursive Directory Walk</b> • <b>⚙️ CLI: fix / check / tokens / tree</b>
 </p>
 
-<h1 align="center">phrust</h1>
+</div>
 
-[![Rust](https://img.shields.io/badge/Rust-000000?logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![CI](https://github.com/WarLikeLaux/phrust/actions/workflows/ci.yml/badge.svg)](https://github.com/WarLikeLaux/phrust/actions)
-[![Clippy](https://img.shields.io/badge/Clippy-passing-brightgreen?logo=rust&logoColor=white)]()
-[![Edition](https://img.shields.io/badge/Edition-2024-blue?logo=rust&logoColor=white)]()
-[![Version](https://img.shields.io/badge/Version-0.3.1-orange?logo=rust&logoColor=white)]()
-
-> ⚡ Быстрый форматтер HTML + PHP для view-файлов Yii 2, написанный на Rust.
+---
 
 ## Зачем
 
