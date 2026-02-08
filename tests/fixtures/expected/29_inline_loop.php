@@ -1,0 +1,27 @@
+<select name="category" class="form-select" id="category-select">
+    <?php foreach ($categories as $id => $name): ?>
+        <option value="<?= $id ?>" <?= $id == $selected ? ' selected' : '' ?>><?= Html::encode($name) ?></option>
+    <?php endforeach; ?>
+</select>
+<table class="table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th><?= Yii::t('app', 'ui.name') ?></th>
+            <th><?= Yii::t('app', 'ui.price') ?></th>
+        </tr>
+    </thead>
+    <tbody>
+        <?php foreach ($products as $i => $product): ?>
+            <tr class="<?= $i % 2 === 0 ? 'even' : 'odd' ?>">
+                <td><?= $i + 1 ?></td>
+                <td>
+                    <a href="<?= Url::to(['product/view', 'id' => $product->id]) ?>">
+                        <?= Html::encode($product->name) ?>
+                    </a>
+                </td>
+                <td><?= Yii::$app->formatter->asCurrency($product->price) ?></td>
+            </tr>
+        <?php endforeach; ?>
+    </tbody>
+</table>
