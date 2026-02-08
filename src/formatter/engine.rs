@@ -23,6 +23,23 @@ fn is_php_block_closer(code: &str) -> bool {
         || lower.starts_with("elseif")
 }
 
+fn is_echo_block_opener(code: &str) -> bool {
+    let trimmed = code.trim().to_lowercase();
+    trimmed.contains("begintag(")
+}
+
+fn is_echo_block_closer(code: &str) -> bool {
+    let trimmed = code.trim().to_lowercase();
+    trimmed.contains("endtag(")
+}
+
+fn is_header_php_block(code: &str) -> bool {
+    code.lines().any(|line| {
+        let t = line.trim();
+        t.starts_with("use ") || t.starts_with("declare(")
+    })
+}
+
 fn is_void_element(name: &str) -> bool {
     VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
 }
@@ -181,18 +198,19 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
     let mut first_content = true;
     let mut prev_was_doc_close = false;
     let mut prev_was_use = false;
+    let is_header = is_header_php_block(&code);
 
     for line in code.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
-            if !prev_blank {
+            if !prev_blank && !first_content {
                 result.push('\n');
                 prev_blank = true;
             }
             continue;
         }
 
-        if first_content && !prev_blank {
+        if first_content && !prev_blank && is_header {
             result.push('\n');
         }
         first_content = false;
@@ -290,12 +308,77 @@ fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
 }
 
 fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String {
+    let inner_pad = format!("{pad}{INDENT}");
     let mut result = format!("{pad}{prefix}\n");
     for arg in args {
-        result.push_str(&format!("{pad}{INDENT}{arg},\n"));
+        let line_len = inner_pad.len() + arg.len() + 1;
+        if line_len > MAX_LINE_LENGTH
+            && let Some(expanded) = expand_nested_array(arg, &inner_pad)
+        {
+            result.push_str(&expanded);
+            continue;
+        }
+        result.push_str(&format!("{inner_pad}{arg},\n"));
     }
     result.push_str(&format!("{pad}{suffix}\n"));
     result
+}
+
+fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
+    let bytes = arg.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    if i < len && (bytes[i] == b'\'' || bytes[i] == b'"') {
+        let quote = bytes[i];
+        i += 1;
+        while i < len && bytes[i] != quote {
+            if bytes[i] == b'\\' {
+                i += 1;
+            }
+            i += 1;
+        }
+        if i < len {
+            i += 1;
+        }
+    }
+
+    let rest = &arg[i..];
+    let arrow_in_rest = rest.find(" => ")?;
+    let value_start = i + arrow_in_rest + 4;
+
+    let value = arg[value_start..].trim();
+    if !value.starts_with('[') || !value.ends_with(']') {
+        return None;
+    }
+
+    let inner = &value[1..value.len() - 1];
+    let items = split_by_commas(inner);
+    if items.len() <= 1 {
+        return None;
+    }
+
+    let key = &arg[..value_start];
+    let nested_pad = format!("{pad}{INDENT}");
+    let mut result = format!("{pad}{key}[\n");
+    for item in &items {
+        if item.starts_with('[') && item.ends_with(']') {
+            let sub_inner = &item[1..item.len() - 1];
+            let sub_items = split_by_commas(sub_inner);
+            if sub_items.len() > 1 {
+                let deeper_pad = format!("{nested_pad}{INDENT}");
+                result.push_str(&format!("{nested_pad}[\n"));
+                for sub in &sub_items {
+                    result.push_str(&format!("{deeper_pad}{sub},\n"));
+                }
+                result.push_str(&format!("{nested_pad}],\n"));
+                continue;
+            }
+        }
+        result.push_str(&format!("{nested_pad}{item},\n"));
+    }
+    result.push_str(&format!("{pad}],\n"));
+    Some(result)
 }
 
 fn format_echo(code: &str, pad: &str) -> String {
@@ -385,7 +468,9 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 if is_multiline {
                     output.push_str(&format!("{pad}<?php\n"));
                     output.push_str(&reindent_php_block(code, &pad));
-                    output.push('\n');
+                    if is_header_php_block(code) {
+                        output.push('\n');
+                    }
                     output.push_str(&format!("{pad}?>\n"));
                 } else {
                     let formatted = format_php_code(code);
@@ -398,9 +483,20 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                         if single.len() <= MAX_LINE_LENGTH {
                             output.push_str(&format!("{single}\n"));
                         } else {
-                            output.push_str(&format!("{pad}<?php\n"));
-                            output.push_str(&reindent_php_block(code, &pad));
-                            output.push_str(&format!("{pad}?>\n"));
+                            let reindented = reindent_php_block(code, &pad);
+                            let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
+                            if lines.len() > 1 {
+                                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+                                for line in &lines[1..lines.len() - 1] {
+                                    output.push_str(line);
+                                    output.push('\n');
+                                }
+                                output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
+                            } else {
+                                output.push_str(&format!("{pad}<?php\n"));
+                                output.push_str(&reindented);
+                                output.push_str(&format!("{pad}?>\n"));
+                            }
                         }
                         if is_php_block_opener(code) {
                             current_depth += 1;
@@ -409,7 +505,16 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 }
             }
             Node::PhpEcho(code) => {
-                output.push_str(&format_echo(code, &pad));
+                if is_echo_block_closer(code) {
+                    current_depth = current_depth.saturating_sub(1);
+                    let pad = INDENT.repeat(current_depth);
+                    output.push_str(&format_echo(code, &pad));
+                } else {
+                    output.push_str(&format_echo(code, &pad));
+                    if is_echo_block_opener(code) {
+                        current_depth += 1;
+                    }
+                }
             }
         }
     }
