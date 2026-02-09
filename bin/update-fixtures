@@ -4,12 +4,12 @@ set -euo pipefail
 DIR="tests/fixtures"
 mkdir -p "$DIR/expected"
 
-trap 'rm -f /tmp/phrust_update_*' EXIT
+trap 'rm -f /tmp/phew_update_*' EXIT
 
 for input in "$DIR"/input/*; do
     name=$(basename "$input")
     expected="$DIR/expected/$name"
-    tmp_file="/tmp/phrust_update_$name"
+    tmp_file="/tmp/phew_update_$name"
 
     cargo run -q -- "$input" > "$tmp_file"
 

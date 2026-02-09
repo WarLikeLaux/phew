@@ -1,8 +1,8 @@
 use clap::Parser;
-use phrust::parser::{ast, lexer};
+use phew::parser::{ast, lexer};
 
 #[derive(Parser)]
-#[command(name = "phrust")]
+#[command(name = "phew")]
 #[command(about = "Fast HTML + PHP formatter for Yii 2 view files")]
 struct Cli {
     #[arg(help = "Files or directories to format")]
@@ -77,7 +77,7 @@ fn process_file(path: &str, cli: &Cli) {
         print_tree(&nodes, 0);
     } else {
         let nodes = ast::parse(tokens);
-        let formatted = phrust::formatter::engine::format(&nodes);
+        let formatted = phew::formatter::engine::format(&nodes);
         if cli.write {
             if let Err(e) = std::fs::write(path, &formatted) {
                 eprintln!("Error writing {path}: {e}");
@@ -92,7 +92,7 @@ fn main() {
     let cli = Cli::parse();
 
     if cli.paths.is_empty() {
-        println!("phrust v{}", env!("CARGO_PKG_VERSION"));
+        println!("phew v{}", env!("CARGO_PKG_VERSION"));
         return;
     }
 

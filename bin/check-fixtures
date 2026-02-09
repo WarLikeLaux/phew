@@ -19,12 +19,12 @@ get_cpu_count() {
     fi
 }
 
-JOBS="${PHRUST_FIXTURE_JOBS:-$(get_cpu_count)}"
+JOBS="${PHEW_FIXTURE_JOBS:-$(get_cpu_count)}"
 if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [ "$JOBS" -lt 1 ]; then
     JOBS=1
 fi
 
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/phrust_check.XXXXXX")"
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/phew_check.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 if ! cargo build -q; then
@@ -32,7 +32,7 @@ if ! cargo build -q; then
     exit 1
 fi
 
-BIN="${PHRUST_FIXTURE_BIN:-target/debug/phrust}"
+BIN="${PHEW_FIXTURE_BIN:-target/debug/phew}"
 if [ ! -x "$BIN" ]; then
     echo "❌ formatter binary not found: $BIN"
     exit 1
