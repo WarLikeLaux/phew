@@ -278,7 +278,9 @@ fn matches_keyword_at(chars: &[char], pos: usize, keyword: &str) -> bool {
 
 fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result: &mut String) {
     let leading = count_leading_closers(formatted) as i32;
-    let write_depth = (*depth - leading).max(0) as usize;
+    let is_ternary_cont = formatted.starts_with("? ") || formatted.starts_with(": ");
+    let extra = i32::from(is_ternary_cont);
+    let write_depth = (*depth - leading + extra).max(0) as usize;
     let inner_pad = INDENT.repeat(write_depth);
     let base_pad = format!("{pad}{inner_pad}");
     if let Some(split) = try_split_long_line(formatted, &base_pad) {
@@ -294,12 +296,50 @@ fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result: &mu
     *depth = (*depth).max(0);
 }
 
+fn join_ternary_lines(code: &str) -> String {
+    let lines: Vec<&str> = code.lines().collect();
+    let mut result: Vec<String> = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let trimmed = lines[i].trim();
+        let ends_with_ternary = trimmed.ends_with(" ?") || (trimmed.ends_with('?') && !trimmed.ends_with("?>"));
+        let next_is_continuation =
+            i + 1 < lines.len() && (lines[i + 1].trim().starts_with("? ") || lines[i + 1].trim().starts_with(": "));
+        let should_join = ends_with_ternary || next_is_continuation;
+
+        if !should_join {
+            result.push(lines[i].to_string());
+            i += 1;
+            continue;
+        }
+
+        let mut joined = trimmed.to_string();
+        i += 1;
+        while i < lines.len() {
+            let next = lines[i].trim();
+            if next.is_empty() {
+                break;
+            }
+            joined.push(' ');
+            joined.push_str(next);
+            i += 1;
+            if next.contains(';') {
+                break;
+            }
+        }
+        result.push(joined);
+    }
+
+    result.join("\n")
+}
+
 fn reindent_php_block(code: &str, pad: &str) -> String {
     let needs_normalize = !code.contains('\n') && (code.contains(';') || has_switch_case(code));
     let code = if needs_normalize {
         normalize_statements(code)
     } else {
-        code.to_string()
+        join_ternary_lines(code)
     };
     let mut result = String::new();
     let mut depth: i32 = 0;
@@ -372,6 +412,16 @@ fn find_matching_close(chars: &[char], open_pos: usize) -> Option<usize> {
 fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
     if base_pad.len() + formatted.len() <= MAX_LINE_LENGTH {
         return None;
+    }
+
+    if let Some((q_pos, c_pos)) = find_ternary_positions(formatted) {
+        let condition = formatted[..q_pos].trim_end();
+        let true_val = formatted[q_pos + 1..c_pos].trim();
+        let false_val = formatted[c_pos + 1..].trim();
+        let inner_pad = format!("{base_pad}{INDENT}");
+        return Some(format!(
+            "{base_pad}{condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val}\n"
+        ));
     }
 
     if let Some((prefix, args, suffix)) = split_by_args(formatted) {
@@ -582,6 +632,69 @@ fn format_echo_array_split(prefix: &str, args: &[String], suffix: &str, pad: &st
     Some(result)
 }
 
+fn find_ternary_positions(code: &str) -> Option<(usize, usize)> {
+    let bytes = code.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let mut depth = 0i32;
+    let mut question_pos: Option<usize> = None;
+
+    while i < len {
+        match bytes[i] {
+            b'\'' | b'"' => {
+                let q = bytes[i];
+                i += 1;
+                while i < len && bytes[i] != q {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+            }
+            b'(' | b'[' => depth += 1,
+            b')' | b']' => depth -= 1,
+            b'?' if depth == 0 && question_pos.is_none() => {
+                if i + 1 < len && bytes[i + 1] == b'>' {
+                    i += 2;
+                    continue;
+                }
+                if i + 1 < len && bytes[i + 1] == b'?' {
+                    i += 2;
+                    continue;
+                }
+                if i + 1 < len && bytes[i + 1] == b':' {
+                    i += 2;
+                    continue;
+                }
+                question_pos = Some(i);
+            }
+            b':' if depth == 0 && question_pos.is_some() => {
+                if i + 1 < len && bytes[i + 1] == b':' {
+                    i += 2;
+                    continue;
+                }
+                return Some((question_pos?, i));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn split_ternary(code: &str, pad: &str) -> Option<String> {
+    let (q_pos, c_pos) = find_ternary_positions(code)?;
+
+    let condition = code[..q_pos].trim_end();
+    let true_val = code[q_pos + 1..c_pos].trim();
+    let false_val = code[c_pos + 1..].trim();
+
+    let inner_pad = format!("{pad}{INDENT}");
+    Some(format!(
+        "{pad}<?= {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
+    ))
+}
+
 fn format_echo(code: &str, pad: &str) -> String {
     let joined = join_php_lines(code);
     let formatted = format_php_code(&joined);
@@ -595,6 +708,10 @@ fn format_echo(code: &str, pad: &str) -> String {
     let parts = split_by_chain(&formatted);
     if parts.len() > 2 {
         return format_echo_chain(&parts, pad);
+    }
+
+    if let Some(result) = split_ternary(&formatted, pad) {
+        return result;
     }
 
     if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
@@ -809,6 +926,14 @@ fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut S
     let single = format!("{pad}<?php {formatted} ?>");
     if single.len() <= MAX_LINE_LENGTH {
         output.push_str(&format!("{single}\n"));
+    } else if let Some((q_pos, c_pos)) = find_ternary_positions(&formatted) {
+        let condition = formatted[..q_pos].trim_end();
+        let true_val = formatted[q_pos + 1..c_pos].trim();
+        let false_val = formatted[c_pos + 1..].trim();
+        let inner_pad = format!("{pad}{INDENT}");
+        output.push_str(&format!(
+            "{pad}<?php {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
+        ));
     } else {
         let reindented = reindent_php_block(code, pad);
         let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
