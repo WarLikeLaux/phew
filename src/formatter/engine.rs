@@ -956,6 +956,14 @@ fn emit_single_php(code: &str, pad: &str, state: &mut PhpDepthState, output: &mu
 
 fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut String) {
     let formatted = format_php_code(code);
+    if is_header_php_block(code) {
+        output.push_str(&format!("{pad}<?php\n"));
+        let reindented = reindent_php_block(code, pad);
+        output.push_str(&reindented);
+        output.push('\n');
+        output.push_str(&format!("{pad}?>\n"));
+        return;
+    }
     let single = format!("{pad}<?php {formatted} ?>");
     if single.len() <= MAX_LINE_LENGTH {
         output.push_str(&format!("{single}\n"));

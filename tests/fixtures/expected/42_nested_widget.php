@@ -1,4 +1,8 @@
-<?php use yii\bootstrap5\Modal; ?>
+<?php
+
+use yii\bootstrap5\Modal;
+
+?>
 <div class="page">
     <?php Modal::begin(['id' => 'outer-modal', 'title' => 'Outer']); ?>
         <div class="outer-body">
