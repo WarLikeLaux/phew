@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "dev" ]
   pull_request:
-    branches: [ "main" ]
+    types: [opened, synchronize, reopened]
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,6 +24,9 @@ jobs:
 
       - name: test
         run: cargo test
+
+      - name: fixtures
+        run: ./bin/check-fixtures
 
       - name: build
         run: cargo build --release

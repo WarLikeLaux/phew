@@ -1,0 +1,33 @@
+<div class="list">
+    <?php foreach ($items as $item): ?>
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><?= Html::encode($item->title) ?></h5>
+                <span class="badge bg-<?= $item->isActive() ? 'success' : 'secondary' ?>">
+                    <?= $item->statusLabel ?>
+                </span>
+            </div>
+            <div class="card-body">
+                <p><?= Html::encode($item->description) ?></p>
+                <div class="d-flex gap-2">
+                    <?= Html::a(
+                        Yii::t('app', 'ui.view'),
+                        ['view', 'id' => $item->id],
+                        ['class' => 'btn btn-sm btn-outline-primary'],
+                    ) ?>
+                    <?= Html::a(
+                        Yii::t('app', 'ui.edit'),
+                        ['update', 'id' => $item->id],
+                        ['class' => 'btn btn-sm btn-outline-secondary'],
+                    ) ?>
+                    <?php if ($item->canDelete()): ?>
+                        <?= Html::a(Yii::t('app', 'ui.delete'), ['delete', 'id' => $item->id], [
+                            'class' => 'btn btn-sm btn-outline-danger',
+                            'data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post'],
+                        ]) ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+    <?php endforeach; ?>
+</div>

@@ -1,0 +1,10 @@
+{
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "[php]": {
+        "editor.formatOnSave": false
+    },
+    "antigravity.searchMaxWorkspaceFileCount": 1000
+}

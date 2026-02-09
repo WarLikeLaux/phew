@@ -1,3 +1,5 @@
 /target
 Cargo.lock
 .diff-parts
+.env
+node_modules

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DIR="tests/fixtures"
+mkdir -p "$DIR/expected"
+
+trap 'rm -f /tmp/phew_update_*' EXIT
+
+for input in "$DIR"/input/*; do
+    name=$(basename "$input")
+    expected="$DIR/expected/$name"
+    tmp_file="/tmp/phew_update_$name"
+
+    cargo run -q -- "$input" > "$tmp_file"
+
+    if [ -f "$expected" ] && diff -q "$expected" "$tmp_file" > /dev/null 2>&1; then
+        echo "  ✓ $name (unchanged)"
+    else
+        mv "$tmp_file" "$expected"
+        echo "  ↻ $name (updated)"
+    fi
+done
+
+echo ""
+echo "✅ All fixtures updated!"

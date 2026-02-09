@@ -1,0 +1,13 @@
+<div class="actions">
+    <p>
+        <?= Html::a(
+            $model->isNewRecord ? Yii::t('app', 'ui.create') : Yii::t('app', 'ui.update'),
+            ['save', 'id' => $model->id],
+            [
+                'class' => $model->isNewRecord ? 'btn btn-success' : 'btn btn-primary',
+                'data-method' => 'post',
+                'data-confirm' => Yii::t('app', 'ui.confirm_save'),
+            ],
+        ) ?>
+    </p>
+</div>

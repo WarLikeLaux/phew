@@ -7,7 +7,7 @@ dev: fmt lint
 test:
     cargo test
 
-check: lint test
+check: lint test fixtures
     @echo "✅ check ok"
 
 fmt:
@@ -22,6 +22,12 @@ build:
 run *args:
     cargo run -- {{args}}
 
+fix *args:
+    cargo run -- -w {{args}}
+
+fixtures:
+    ./bin/check-fixtures
+
 clean:
     cargo clean
 
@@ -30,3 +36,9 @@ d chars="15000":
 
 dc:
     git diff --staged
+
+review-fetch *args:
+    @node scripts/fetch-pr-comments.mjs {{args}}
+
+review-resolve:
+    @node scripts/resolve-pr-threads.mjs
