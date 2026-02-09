@@ -7,6 +7,7 @@ pub fn format_php_code(code: &str) -> String {
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
     let mut i = 0;
+    let preserve_declare_equal = code.trim_start().starts_with("declare(");
 
     while i < len {
         let ch = chars[i];
@@ -18,6 +19,11 @@ pub fn format_php_code(code: &str) -> String {
 
         if ch == '=' && i + 1 < len && chars[i + 1] == '>' {
             i = format_fat_arrow(&chars, i, &mut result);
+            continue;
+        }
+
+        if ch == '=' && !preserve_declare_equal {
+            i = format_assignment_equal(&chars, i, &mut result);
             continue;
         }
 
@@ -438,6 +444,40 @@ fn format_comma(chars: &[char], start: usize, result: &mut String) -> usize {
     i
 }
 
+fn format_assignment_equal(chars: &[char], start: usize, result: &mut String) -> usize {
+    let len = chars.len();
+    let prev = if start > 0 { Some(chars[start - 1]) } else { None };
+    let next = if start + 1 < len { Some(chars[start + 1]) } else { None };
+
+    let is_non_assignment = next.is_some_and(|c| c == '=' || c == '>')
+        || prev.is_some_and(|c| {
+            matches!(
+                c,
+                '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '.' | '&' | '|' | '^' | '?'
+            )
+        });
+
+    if is_non_assignment {
+        result.push('=');
+        return start + 1;
+    }
+
+    if !result.ends_with(' ') && !result.ends_with('\n') && !result.ends_with('\t') {
+        result.push(' ');
+    }
+    result.push('=');
+
+    let mut i = start + 1;
+    while i < len && chars[i] == ' ' {
+        i += 1;
+    }
+    if i < len && chars[i] != ' ' && chars[i] != '\n' && chars[i] != '\t' && chars[i] != '\r' {
+        result.push(' ');
+    }
+
+    i
+}
+
 fn format_keyword(chars: &[char], start: usize, result: &mut String) -> usize {
     let len = chars.len();
     let mut i = start;
@@ -540,5 +580,24 @@ mod tests {
             split_by_concat(code),
             vec!["'a'".to_string(), "$b".to_string(), "'c'".to_string()]
         );
+    }
+
+    #[test]
+    fn assignment_spacing() {
+        assert_eq!(format_php_code("$name='World';"), "$name = 'World';");
+    }
+
+    #[test]
+    fn assignment_keeps_comparisons() {
+        assert_eq!(format_php_code("$a==$b"), "$a==$b");
+        assert_eq!(format_php_code("$a!=$b"), "$a!=$b");
+        assert_eq!(format_php_code("$a>=$b"), "$a>=$b");
+        assert_eq!(format_php_code("$a<=$b"), "$a<=$b");
+        assert_eq!(format_php_code("$a??=$b"), "$a??=$b");
+    }
+
+    #[test]
+    fn declare_equal_unchanged() {
+        assert_eq!(format_php_code("declare(strict_types=1);"), "declare(strict_types=1);");
     }
 }
