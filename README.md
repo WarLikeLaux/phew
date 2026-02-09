@@ -1,23 +1,23 @@
 <div align="center">
-<img src="docs/hero.png" alt="phew — fast HTML + PHP formatter for Yii 2 views" width="800">
+<img src="docs/hero.png" alt="phew - fast HTML + PHP formatter for Yii 2 views" width="800">
 
-# PHEW
+# PHEW! Your **PH**P vi**EW**s are formatted so quickly!
 
-**⚡ PHEW! Быстрый форматтер HTML + PHP для view-файлов Yii 2 • Rust 2024 Edition**
+**⚡ Быстрый форматтер HTML + PHP для view-файлов Yii 2 • Rust 2024 edition**
 
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-52_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Tests](https://img.shields.io/badge/Tests-56_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
 [![Fixtures](https://img.shields.io/badge/Fixtures-56_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
 [![Version](https://img.shields.io/badge/Version-0.5.2-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
 <p align="center">
-  <b>🔍 Lexer + AST Parser</b> • <b>🎨 HTML + PHP Formatting</b> • <b>🔀 Smart Line Splitting</b><br>
-  <b>🏗 Yii 2 Widgets</b> • <b>📁 Recursive Directory Walk</b> • <b>⚙️ CLI: fix / check / tokens / tree</b>
+  <b>🔍 Lexer + AST parser</b> • <b>🎨 HTML + PHP formatting</b> • <b>🔀 Smart line splitting</b><br>
+  <b>🏗 Yii 2 widgets</b> • <b>📁 Recursive directory walk</b> • <b>⚙️ CLI: fix / check / tokens / tree</b>
 </p>
 
 </div>
@@ -26,16 +26,16 @@
 
 ## Зачем
 
-View-файлы в Yii 2 — это `.php`, внутри которых HTML, PHP-вставки, виджеты и альтернативный синтаксис (`foreach(): ... endforeach;`) вперемешку. Ни один из существующих форматтеров не справляется с этим:
+View-файлы в Yii 2 - это `.php`, внутри которых HTML, PHP-вставки, виджеты и альтернативный синтаксис (`foreach(): ... endforeach;`) вперемешку. Ни один из существующих форматтеров не справляется с этим:
 
-- **Prettier** — понимает только HTML. Встретив `<?php`, ломает отступы или выкидывает блок как есть
-- **PHP CS Fixer** — работает только с чистым PHP. HTML для него невидим, view-файлы он просто пропускает
-- **Blade Formatter** — заточен под Laravel Blade, синтаксис Yii 2 не понимает
-- **HTMLBeautifier** — форматирует HTML, но `<?= Html::a(...) ?>` превращает в кашу
-- **PhpStorm** — встроенный форматтер лучше всех, но работает только внутри IDE и даже он спотыкается на вложенных виджетах
-- **Intelephense** — неплохо справляется с форматированием, но это расширение VS Code. Из консоли, CI или pre-commit хука его не вызовешь
+- **Prettier** - понимает только HTML. Встретив `<?php`, ломает отступы или выкидывает блок как есть
+- **PHP CS Fixer** - работает только с чистым PHP. HTML для него невидим, view-файлы он просто пропускает
+- **Blade Formatter** - заточен под Laravel Blade, синтаксис Yii 2 не понимает
+- **HTMLBeautifier** - форматирует HTML, но `<?= Html::a(...) ?>` превращает в кашу
+- **PhpStorm** - встроенный форматтер лучше всех, но работает только внутри IDE и даже он спотыкается на вложенных виджетах
+- **Intelephense** - неплохо справляется с форматированием, но это расширение VS Code. Из консоли, CI или pre-commit хука его не вызовешь
 
-Итого: ты либо форматируешь руками, либо живёшь с кривыми отступами. **phew** закрывает эту дыру — один инструмент, который понимает и HTML, и PHP в контексте друг друга.
+Итого: ты либо форматируешь руками, либо живёшь с кривыми отступами. **phew** закрывает эту дыру - один инструмент, который понимает и HTML, и PHP в контексте друг друга.
 
 ## Что умеет
 
@@ -116,6 +116,13 @@ phew --tree views/site/index.php
 phew
 ```
 
+## Документация
+
+- [Быстрый старт (без глубокого погружения)](docs/quick-start.md)
+- [Как работает phew (пайплайн и диаграммы)](docs/how-it-works.md)
+- [Техническая архитектура для Rust-разработчиков](docs/rust-developer-guide.md)
+- [Гайд для PHP/Yii2-разработчиков](docs/php-developer-guide.md)
+
 ## Архитектура
 
 ```text
@@ -128,8 +135,8 @@ src/
 │   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (236 строк)
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
-│   ├── engine.rs        # Движок форматирования (1307 строк)
-│   ├── php.rs           # PHP: keyword spacing, fat arrow, commas, splitting (462 строки)
+│   ├── engine.rs        # Движок форматирования (1596 строк)
+│   ├── php.rs           # PHP: keyword spacing, assignment spacing, fat arrow, splitting (603 строки)
 │   ├── html.rs          # HTML-правила (заглушка)
 │   └── yii.rs           # Yii 2 паттерны (заглушка)
 └── io/
@@ -152,14 +159,14 @@ src/
 
 ## Тестирование
 
-**52 unit-теста** по всем модулям:
+**56 unit-тестов** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
 | `parser::lexer` | 21 |
 | `parser::ast` | 6 |
 | `formatter::engine` | 7 |
-| `formatter::php` | 12 |
+| `formatter::php` | 16 |
 | stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 6 |
 
 **56 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
@@ -255,7 +262,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
 | **0.5** | Конфиг `.phew.toml` | 🔜 |
-| **1.0** | Стабильный релиз | — |
+| **1.0** | Стабильный релиз | - |
 
 ## Политика форматирования
 
