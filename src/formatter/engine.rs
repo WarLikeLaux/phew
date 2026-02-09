@@ -178,6 +178,56 @@ fn is_single_echo_block(code: &str) -> bool {
     trimmed.starts_with("echo ") && !trimmed.contains('\n') && trimmed.matches(';').count() <= 1
 }
 
+fn expand_single_line_docblock(code: &str) -> Option<String> {
+    let trimmed = code.trim();
+    if trimmed.contains('\n') || !trimmed.starts_with("/**") || !trimmed.ends_with("*/") {
+        return None;
+    }
+
+    let mut body = trimmed.strip_prefix("/**").and_then(|s| s.strip_suffix("*/"))?.trim();
+    if let Some(rest) = body.strip_prefix('*') {
+        body = rest.trim_start();
+    }
+
+    if body.is_empty() {
+        Some("/**\n */".to_string())
+    } else {
+        Some(format!("/**\n * {body}\n */"))
+    }
+}
+
+fn is_docblock_only(code: &str) -> bool {
+    let trimmed = code.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if trimmed.starts_with("/**") && trimmed.ends_with("*/") && !trimmed.contains('\n') {
+        return true;
+    }
+
+    let lines: Vec<&str> = trimmed.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    if lines.len() < 2 {
+        return false;
+    }
+    if lines.first().copied() != Some("/**") || lines.last().copied() != Some("*/") {
+        return false;
+    }
+
+    lines[1..lines.len() - 1].iter().all(|line| line.starts_with('*'))
+}
+
+fn emit_docblock_php(code: &str, pad: &str, output: &mut String) {
+    let docblock = expand_single_line_docblock(code).unwrap_or_else(|| code.trim().to_string());
+    output.push_str(&format!("{pad}<?php\n"));
+    for line in docblock.lines() {
+        output.push_str(pad);
+        output.push_str(line.trim_end());
+        output.push('\n');
+    }
+    output.push_str(&format!("{pad}?>\n"));
+}
+
 fn is_inline_content(children: &[Node]) -> bool {
     children.iter().all(|c| match c {
         Node::Text(_) | Node::PhpEcho(_) => true,
@@ -557,6 +607,17 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         prev_was_doc_close = trimmed == "*/";
         prev_was_use = is_use_import;
         prev_was_declare = is_declare;
+
+        if let Some(expanded_doc) = expand_single_line_docblock(trimmed) {
+            for doc_line in expanded_doc.lines() {
+                emit_reindented_line(doc_line, pad, &mut depth, &mut result);
+            }
+            prev_was_doc_close = true;
+            prev_was_use = false;
+            prev_was_declare = false;
+            continue;
+        }
+
         let formatted = format_php_code(trimmed);
         emit_reindented_line(&formatted, pad, &mut depth, &mut result);
         if let Some(marker) = detect_heredoc(trimmed) {
@@ -1277,6 +1338,10 @@ fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut S
         output.push_str(&format!("{pad}?>\n"));
         return;
     }
+    if let Some(docblock) = expand_single_line_docblock(code) {
+        emit_docblock_php(&docblock, pad, output);
+        return;
+    }
     let single = format!("{pad}<?php {formatted} ?>");
     if single.len() <= MAX_LINE_LENGTH {
         output.push_str(&format!("{single}\n"));
@@ -1318,6 +1383,10 @@ fn emit_php_block(code: &str, pad: &str, state: &mut PhpDepthState, output: &mut
             emit_php_echo(expr, pad, state, output);
             return;
         }
+    }
+    if is_docblock_only(code) {
+        emit_docblock_php(code, pad, output);
+        return;
     }
     let semicolons = count_semicolons_outside_parens(code);
     let is_multiline = code.contains('\n') || semicolons > 1 || has_switch_case(code);
@@ -1375,11 +1444,11 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
         depth,
         switch_stack: Vec::new(),
     };
-
-    for node in nodes {
+    let mut i = 0usize;
+    while i < nodes.len() {
         let pad = INDENT.repeat(state.depth);
 
-        match node {
+        match &nodes[i] {
             Node::Element {
                 name,
                 attributes,
@@ -1395,7 +1464,39 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                     output.push('\n');
                 }
             }
-            Node::PhpBlock(code) => emit_php_block(code, &pad, &mut state, output),
+            Node::PhpBlock(code) => {
+                if state.depth == 0 && (is_header_php_block(code) || is_docblock_only(code)) {
+                    let mut merged = code.trim().to_string();
+                    let mut j = i + 1;
+                    let mut merged_any = false;
+
+                    while j < nodes.len() {
+                        match &nodes[j] {
+                            Node::Text(s) if s.trim().is_empty() => {
+                                j += 1;
+                            }
+                            Node::PhpBlock(next_code)
+                                if is_header_php_block(next_code) || is_docblock_only(next_code) =>
+                            {
+                                if !merged.is_empty() {
+                                    merged.push('\n');
+                                }
+                                merged.push_str(next_code.trim());
+                                merged_any = true;
+                                j += 1;
+                            }
+                            _ => break,
+                        }
+                    }
+
+                    if merged_any {
+                        emit_php_block(&merged, &pad, &mut state, output);
+                        i = j;
+                        continue;
+                    }
+                }
+                emit_php_block(code, &pad, &mut state, output);
+            }
             Node::PhpEcho(code) => emit_php_echo(code, &pad, &mut state, output),
             Node::Doctype(s) => {
                 output.push_str(&format!("{pad}<!DOCTYPE {s}>\n"));
@@ -1404,6 +1505,8 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 output.push_str(&format!("{pad}<!-- {s} -->\n"));
             }
         }
+
+        i += 1;
     }
 }
 
