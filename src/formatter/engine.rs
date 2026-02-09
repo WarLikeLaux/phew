@@ -1,4 +1,4 @@
-use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_commas};
+use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_commas, split_by_concat};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
@@ -136,6 +136,41 @@ fn format_attributes(attrs: &[Attribute]) -> String {
         .collect();
 
     format!(" {}", parts.join(" "))
+}
+
+fn format_attribute(attr: &Attribute) -> String {
+    match &attr.value {
+        Some(v) => format!("{}=\"{}\"", attr.name, v),
+        None => attr.name.clone(),
+    }
+}
+
+struct TagParams<'a> {
+    name: &'a str,
+    attributes: &'a [Attribute],
+    self_closing: bool,
+}
+
+fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
+    let attrs = format_attributes(tag.attributes);
+    let tail = if tag.self_closing { " />" } else { ">" };
+    let name = tag.name;
+    let single = format!("{pad}<{name}{attrs}{tail}");
+
+    if tag.attributes.is_empty() || single.len() <= MAX_LINE_LENGTH {
+        output.push_str(&single);
+        output.push('\n');
+        return;
+    }
+
+    output.push_str(&format!("{pad}<{name}\n"));
+    let attr_pad = format!("{pad}{INDENT}");
+    for attr in tag.attributes {
+        output.push_str(&attr_pad);
+        output.push_str(&format_attribute(attr));
+        output.push('\n');
+    }
+    output.push_str(&format!("{pad}{tail}\n"));
 }
 
 fn is_single_echo_block(code: &str) -> bool {
@@ -571,9 +606,10 @@ fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
         let true_val = formatted[q_pos + 1..c_pos].trim();
         let false_val = formatted[c_pos + 1..].trim();
         let inner_pad = format!("{base_pad}{INDENT}");
-        return Some(format!(
-            "{base_pad}{condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val}\n"
-        ));
+        let mut result = format!("{base_pad}{condition}\n");
+        append_ternary_value(&mut result, '?', true_val, &inner_pad);
+        append_ternary_value(&mut result, ':', false_val, &inner_pad);
+        return Some(result);
     }
 
     if let Some((prefix, args, suffix)) = split_by_args(formatted) {
@@ -603,6 +639,31 @@ fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
     }
 
     None
+}
+
+fn append_ternary_value(result: &mut String, marker: char, value: &str, line_pad: &str) {
+    let single_len = line_pad.len() + 2 + value.len();
+    if single_len <= MAX_LINE_LENGTH {
+        result.push_str(&format!("{line_pad}{marker} {value}\n"));
+        return;
+    }
+
+    if let Some(split) = try_split_long_line(value, line_pad) {
+        let mut lines = split.lines();
+        if let Some(first) = lines.next() {
+            let first = first.strip_prefix(line_pad).unwrap_or(first).trim_start();
+            result.push_str(&format!("{line_pad}{marker} {first}\n"));
+            for line in lines {
+                if !line.trim().is_empty() {
+                    result.push_str(line);
+                    result.push('\n');
+                }
+            }
+            return;
+        }
+    }
+
+    result.push_str(&format!("{line_pad}{marker} {value}\n"));
 }
 
 fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String {
@@ -640,6 +701,23 @@ fn expand_bare_array(arg: &str, pad: &str) -> Option<String> {
     let inner = &trimmed[1..trimmed.len() - 1];
     let items = split_by_commas(inner);
     if items.len() <= 1 {
+        if items.len() == 1 {
+            let item = &items[0];
+            let nested_pad = format!("{pad}{INDENT}");
+            let item_line_len = nested_pad.len() + item.len() + 1;
+            if item_line_len > MAX_LINE_LENGTH {
+                let mut result = format!("{pad}[\n");
+                if let Some(split) = try_split_long_line(item, &nested_pad) {
+                    let trimmed = split.trim_end_matches('\n');
+                    result.push_str(trimmed);
+                    result.push_str(",\n");
+                } else {
+                    result.push_str(&format!("{nested_pad}{item},\n"));
+                }
+                result.push_str(&format!("{pad}],\n"));
+                return Some(result);
+            }
+        }
         return None;
     }
     let nested_pad = format!("{pad}{INDENT}");
@@ -743,6 +821,16 @@ fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
                 result.push_str(&expanded);
                 continue;
             }
+            if let Some(bare) = expand_bare_sub_array(item, &nested_pad) {
+                result.push_str(&bare);
+                continue;
+            }
+            if let Some(split) = try_split_long_line(item, &nested_pad) {
+                let trimmed = split.trim_end_matches('\n');
+                result.push_str(trimmed);
+                result.push_str(",\n");
+                continue;
+            }
         }
         if let Some(bare) = expand_bare_sub_array(item, &nested_pad) {
             result.push_str(&bare);
@@ -772,6 +860,16 @@ fn format_echo_chain(parts: &[String], pad: &str) -> String {
     result
 }
 
+fn format_echo_concat(parts: &[String], pad: &str) -> String {
+    let concat_pad = format!("{pad}{INDENT}");
+    let mut result = format!("{pad}<?= {}", parts[0]);
+    for part in &parts[1..] {
+        result.push_str(&format!("\n{concat_pad}. {part}"));
+    }
+    result.push_str(" ?>\n");
+    result
+}
+
 fn format_echo_array_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> Option<String> {
     let last = &args[args.len() - 1];
     if !last.starts_with('[') || !last.ends_with(']') {
@@ -794,6 +892,16 @@ fn format_echo_array_split(prefix: &str, args: &[String], suffix: &str, pad: &st
         if inner_pad.len() + item.len() + 1 > MAX_LINE_LENGTH {
             if let Some(expanded) = expand_nested_array(item, &inner_pad) {
                 result.push_str(&expanded);
+                continue;
+            }
+            if let Some(bare) = expand_bare_sub_array(item, &inner_pad) {
+                result.push_str(&bare);
+                continue;
+            }
+            if let Some(split) = try_split_long_line(item, &inner_pad) {
+                let trimmed = split.trim_end_matches('\n');
+                result.push_str(trimmed);
+                result.push_str(",\n");
                 continue;
             }
         }
@@ -885,6 +993,11 @@ fn format_echo(code: &str, pad: &str) -> String {
         return result;
     }
 
+    let concat_parts = split_by_concat(&formatted);
+    if concat_parts.len() > 1 {
+        return format_echo_concat(&concat_parts, pad);
+    }
+
     if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
         if args.len() >= 2 {
             if let Some(r) = format_echo_array_split(&prefix, &args, &suffix, pad) {
@@ -892,8 +1005,26 @@ fn format_echo(code: &str, pad: &str) -> String {
             }
         }
         let mut result = format!("{pad}<?= {prefix}\n");
+        let inner_pad = format!("{pad}{INDENT}");
         for arg in &args {
-            result.push_str(&format!("{pad}{INDENT}{arg},\n"));
+            let line_len = inner_pad.len() + arg.len() + 1;
+            if line_len > MAX_LINE_LENGTH {
+                if let Some(expanded) = expand_nested_array(arg, &inner_pad) {
+                    result.push_str(&expanded);
+                    continue;
+                }
+                if let Some(expanded) = expand_bare_array(arg, &inner_pad) {
+                    result.push_str(&expanded);
+                    continue;
+                }
+                if let Some(split) = try_split_long_line(arg, &inner_pad) {
+                    let trimmed = split.trim_end_matches('\n');
+                    result.push_str(trimmed);
+                    result.push_str(",\n");
+                    continue;
+                }
+            }
+            result.push_str(&format!("{inner_pad}{arg},\n"));
         }
         result.push_str(&format!("{pad}{suffix} ?>\n"));
         return result;
@@ -945,9 +1076,16 @@ struct PhpDepthState {
 fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (usize, &mut String)) {
     let (depth, output) = ctx;
     let pad = INDENT.repeat(depth);
-    let attrs = format_attributes(attributes);
     if RAW_TEXT_ELEMENTS.contains(&name.to_lowercase().as_str()) {
-        output.push_str(&format!("{pad}<{name}{attrs}>\n"));
+        emit_open_tag(
+            &TagParams {
+                name,
+                attributes,
+                self_closing: false,
+            },
+            &pad,
+            output,
+        );
         for child in children {
             if let Node::Text(s) = child {
                 let trimmed = s.trim_start_matches('\n').trim_end();
@@ -966,7 +1104,15 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
         }
         output.push_str(&format!("{pad}</{name}>\n"));
     } else if children.is_empty() && is_void_element(name) {
-        output.push_str(&format!("{pad}<{name}{attrs} />\n"));
+        emit_open_tag(
+            &TagParams {
+                name,
+                attributes,
+                self_closing: true,
+            },
+            &pad,
+            output,
+        );
     } else if is_inline_content(children) {
         let inline = format_inline(name, attributes, children);
         if pad.len() + inline.len() <= MAX_LINE_LENGTH {
@@ -974,12 +1120,28 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             output.push_str(&inline);
             output.push('\n');
         } else {
-            output.push_str(&format!("{pad}<{name}{attrs}>\n"));
+            emit_open_tag(
+                &TagParams {
+                    name,
+                    attributes,
+                    self_closing: false,
+                },
+                &pad,
+                output,
+            );
             format_nodes(children, depth + 1, output);
             output.push_str(&format!("{pad}</{name}>\n"));
         }
     } else {
-        output.push_str(&format!("{pad}<{name}{attrs}>\n"));
+        emit_open_tag(
+            &TagParams {
+                name,
+                attributes,
+                self_closing: false,
+            },
+            &pad,
+            output,
+        );
         format_nodes(children, depth + 1, output);
         output.push_str(&format!("{pad}</{name}>\n"));
     }
@@ -999,9 +1161,10 @@ fn emit_switch_stmt(trimmed: &str, state: &mut PhpDepthState, output: &mut Strin
             .last()
             .copied()
             .unwrap_or(state.depth.saturating_sub(1));
-        let pad = INDENT.repeat(lvl);
+        let case_lvl = lvl + 1;
+        let pad = INDENT.repeat(case_lvl);
         output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
-        state.depth = lvl + 1;
+        state.depth = case_lvl + 1;
     } else if lower.starts_with("endswitch") {
         let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
         let pad = INDENT.repeat(lvl);
@@ -1080,9 +1243,10 @@ fn emit_single_php(code: &str, pad: &str, state: &mut PhpDepthState, output: &mu
             .last()
             .copied()
             .unwrap_or(state.depth.saturating_sub(1));
-        let stmt_pad = INDENT.repeat(lvl);
+        let case_lvl = lvl + 1;
+        let stmt_pad = INDENT.repeat(case_lvl);
         output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
-        state.depth = lvl + 1;
+        state.depth = case_lvl + 1;
     } else if !state.switch_stack.is_empty() && lower.starts_with("endswitch") {
         let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
         let stmt_pad = INDENT.repeat(lvl);
@@ -1158,11 +1322,33 @@ fn emit_php_block(code: &str, pad: &str, state: &mut PhpDepthState, output: &mut
     let semicolons = count_semicolons_outside_parens(code);
     let is_multiline = code.contains('\n') || semicolons > 1 || has_switch_case(code);
     if is_multiline && has_switch_case(code) {
-        for stmt_line in normalize_statements(code).lines() {
-            let trimmed = stmt_line.trim();
-            if !trimmed.is_empty() {
-                emit_switch_stmt(trimmed, state, output);
+        let normalized = normalize_statements(code);
+        let statements: Vec<&str> = normalized
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect();
+        let mut i = 0usize;
+        while i < statements.len() {
+            let current = statements[i];
+            if current.to_lowercase().starts_with("switch")
+                && is_php_block_opener(current)
+                && i + 1 < statements.len()
+                && is_switch_case_peer(statements[i + 1])
+            {
+                let switch_depth = state.depth;
+                let stmt_pad = INDENT.repeat(switch_depth);
+                let switch_stmt = format_php_code(current);
+                let first_case = format_php_code(statements[i + 1]);
+                let case_pad = format!("{stmt_pad}{INDENT}");
+                output.push_str(&format!("{stmt_pad}<?php {switch_stmt}\n{case_pad}{first_case} ?>\n"));
+                state.switch_stack.push(switch_depth);
+                state.depth = switch_depth + 2;
+                i += 2;
+                continue;
             }
+            emit_switch_stmt(current, state, output);
+            i += 1;
         }
     } else if is_multiline {
         emit_multiline_php(code, pad, &mut state.depth, output);
