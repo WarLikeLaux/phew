@@ -109,8 +109,17 @@ fn format_attributes(attrs: &[Attribute]) -> String {
     format!(" {}", parts.join(" "))
 }
 
+fn is_single_echo_block(code: &str) -> bool {
+    let trimmed = code.trim();
+    trimmed.starts_with("echo ") && !trimmed.contains('\n') && trimmed.matches(';').count() <= 1
+}
+
 fn is_inline_content(children: &[Node]) -> bool {
-    children.iter().all(|c| matches!(c, Node::Text(_) | Node::PhpEcho(_)))
+    children.iter().all(|c| match c {
+        Node::Text(_) | Node::PhpEcho(_) => true,
+        Node::PhpBlock(code) => is_single_echo_block(code),
+        _ => false,
+    })
 }
 
 fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> String {
@@ -120,6 +129,11 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
         .map(|c| match c {
             Node::Text(s) => s.trim().to_string(),
             Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(s)),
+            Node::PhpBlock(s) if is_single_echo_block(s) => {
+                let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
+                let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
+                format!("<?= {} ?>", format_php_code(expr))
+            }
             _ => String::new(),
         })
         .collect();
@@ -956,6 +970,15 @@ fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut S
 }
 
 fn emit_php_block(code: &str, pad: &str, state: &mut PhpDepthState, output: &mut String) {
+    let trimmed = code.trim();
+    if let Some(expr) = trimmed.strip_prefix("echo ") {
+        let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
+        let semicolons = count_semicolons_outside_parens(code);
+        if semicolons <= 1 && !expr.contains('\n') {
+            emit_php_echo(expr, pad, state, output);
+            return;
+        }
+    }
     let semicolons = count_semicolons_outside_parens(code);
     let is_multiline = code.contains('\n') || semicolons > 1 || has_switch_case(code);
     if is_multiline && has_switch_case(code) {
