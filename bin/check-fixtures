@@ -7,7 +7,38 @@ FAIL=0
 TOTAL=0
 ERRORS=""
 
-trap 'rm -f /tmp/phrust_actual_* /tmp/phrust_idem_* /tmp/phrust_err_*' EXIT
+get_cpu_count() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+    elif command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+    elif command -v sysctl >/dev/null 2>&1; then
+        sysctl -n hw.ncpu
+    else
+        echo "4"
+    fi
+}
+
+JOBS="${PHRUST_FIXTURE_JOBS:-$(get_cpu_count)}"
+if ! [[ "$JOBS" =~ ^[0-9]+$ ]] || [ "$JOBS" -lt 1 ]; then
+    JOBS=1
+fi
+
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/phrust_check.XXXXXX")"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+
+if ! cargo build -q; then
+    echo "❌ cargo build failed"
+    exit 1
+fi
+
+BIN="${PHRUST_FIXTURE_BIN:-target/debug/phrust}"
+if [ ! -x "$BIN" ]; then
+    echo "❌ formatter binary not found: $BIN"
+    exit 1
+fi
+
+shopt -s nullglob
 
 # orphan check: expected without input
 for expected in "$DIR"/expected/*; do
@@ -19,44 +50,103 @@ for expected in "$DIR"/expected/*; do
     fi
 done
 
-for input in "$DIR"/input/*; do
+check_fixture() {
+    local input="$1"
+    local name expected actual_file idem_file err_file result_file err_msg exit_code
+
     name=$(basename "$input")
     expected="$DIR/expected/$name"
-    TOTAL=$((TOTAL + 1))
+    actual_file="$TMP_ROOT/actual_$name"
+    idem_file="$TMP_ROOT/idem_$name"
+    err_file="$TMP_ROOT/err_$name"
+    result_file="$TMP_ROOT/result_$name"
 
     if [ ! -f "$expected" ]; then
-        ERRORS+="  ⚠ missing expected: $name\n"
-        FAIL=$((FAIL + 1))
-        continue
+        printf 'missing_expected\t%s\n' "$name" >"$result_file"
+        return
     fi
 
-    actual_file="/tmp/phrust_actual_$name"
-    err_file="/tmp/phrust_err_$name"
-
-    cargo run -q -- "$input" > "$actual_file" 2> "$err_file"
+    "$BIN" "$input" >"$actual_file" 2>"$err_file"
     exit_code=$?
-
     if [ "$exit_code" -ne 0 ]; then
-        err_msg=$(cat "$err_file")
-        ERRORS+="  ✗ $name (exit $exit_code: $err_msg)\n"
-        FAIL=$((FAIL + 1))
-        continue
+        err_msg=$(tr '\n\t' '  ' <"$err_file" | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+        printf 'exit_error\t%s\t%s\t%s\n' "$name" "$exit_code" "$err_msg" >"$result_file"
+        return
     fi
 
-    if diff -q "$expected" "$actual_file" > /dev/null 2>&1; then
-        idem_file="/tmp/phrust_idem_$name"
-        cargo run -q -- "$actual_file" > "$idem_file" 2>/dev/null
+    if ! diff -q "$expected" "$actual_file" >/dev/null 2>&1; then
+        printf 'diff\t%s\n' "$name" >"$result_file"
+        return
+    fi
 
-        if diff -q "$actual_file" "$idem_file" > /dev/null 2>&1; then
+    "$BIN" "$actual_file" >"$idem_file" 2>/dev/null
+    exit_code=$?
+    if [ "$exit_code" -ne 0 ]; then
+        printf 'idem_exit_error\t%s\t%s\n' "$name" "$exit_code" >"$result_file"
+        return
+    fi
+
+    if diff -q "$actual_file" "$idem_file" >/dev/null 2>&1; then
+        printf 'pass\t%s\n' "$name" >"$result_file"
+    else
+        printf 'not_idempotent\t%s\n' "$name" >"$result_file"
+    fi
+}
+
+inputs=("$DIR"/input/*)
+TOTAL=$((TOTAL + ${#inputs[@]}))
+
+export DIR BIN TMP_ROOT
+export -f check_fixture
+
+if [ ${#inputs[@]} -gt 0 ]; then
+    for input in "${inputs[@]}"; do
+        printf '%s\0' "$input"
+    done | xargs -0 -n1 -P "$JOBS" bash -c 'check_fixture "$1"' _
+    xargs_status=$?
+    if [ "$xargs_status" -ne 0 ]; then
+        echo "❌ fixture workers failed (xargs exit $xargs_status)"
+        exit 1
+    fi
+fi
+
+results=("$TMP_ROOT"/result_*)
+if [ "${#results[@]}" -ne "${#inputs[@]}" ]; then
+    ERRORS+="  ✗ internal error: expected ${#inputs[@]} result files, got ${#results[@]}\n"
+    FAIL=$((FAIL + 1))
+fi
+
+for result in "${results[@]}"; do
+    IFS=$'\t' read -r status name value details <"$result"
+    case "$status" in
+        pass)
             PASS=$((PASS + 1))
-        else
+            ;;
+        missing_expected)
+            ERRORS+="  ⚠ missing expected: $name\n"
+            FAIL=$((FAIL + 1))
+            ;;
+        diff)
+            ERRORS+="  ✗ $name (output differs from expected)\n"
+            FAIL=$((FAIL + 1))
+            ;;
+        not_idempotent)
             ERRORS+="  ✗ $name (not idempotent — second pass differs)\n"
             FAIL=$((FAIL + 1))
-        fi
-    else
-        ERRORS+="  ✗ $name (output differs from expected)\n"
-        FAIL=$((FAIL + 1))
-    fi
+            ;;
+        idem_exit_error)
+            ERRORS+="  ✗ $name (idempotence run failed with exit $value)\n"
+            FAIL=$((FAIL + 1))
+            ;;
+        exit_error)
+            ERRORS+="  ✗ $name (exit $value: $details)\n"
+            FAIL=$((FAIL + 1))
+            ;;
+        *)
+            ERRORS+="  ✗ $name (unknown fixture status: $status)\n"
+            FAIL=$((FAIL + 1))
+            ;;
+    esac
 done
 
 echo ""
