@@ -18,10 +18,11 @@ $this->params['breadcrumbs'][] = $this->title; ?>
             <?= $form->field($model, 'status')
                 ->dropDownList(
                     $model->getStatusList(),
-                    ['prompt' => $model->isNewRecord ? Yii::t(
-                        'app',
-                        'Select status for new user account',
-                    ) : Yii::t('app', 'Change current status of existing user account')],
+                    [
+                        'prompt' => $model->isNewRecord
+                            ? Yii::t('app', 'Select status for new user account')
+                            : Yii::t('app', 'Change current status of existing user account'),
+                    ],
                 ) ?>
             <?php $buttonLabel = $model->isNewRecord
                 ? Yii::t('app', 'Create New User Account Now')
@@ -29,7 +30,11 @@ $this->params['breadcrumbs'][] = $this->title; ?>
             <div class="form-actions">
                 <?= Html::submitButton(
                     $buttonLabel,
-                    ['class' => $model->isNewRecord ? 'btn btn-success btn-lg btn-block' : 'btn btn-primary btn-lg btn-block'],
+                    [
+                        'class' => $model->isNewRecord
+                            ? 'btn btn-success btn-lg btn-block'
+                            : 'btn btn-primary btn-lg btn-block',
+                    ],
                 ) ?>
             </div>
         </div>

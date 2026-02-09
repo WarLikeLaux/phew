@@ -24,7 +24,10 @@
             'attribute' => 'cover',
             'format' => 'raw',
             'value' => $model->coverUrl
-                ? Html::img($model->coverUrl, ['alt' => $model->title, 'style' => 'max-width:200px;', 'loading' => 'lazy'])
+                ? Html::img(
+                    $model->coverUrl,
+                    ['alt' => $model->title, 'style' => 'max-width:200px;', 'loading' => 'lazy'],
+                )
                 : Yii::t('app', 'ui.no_cover'),
         ],
     ],
