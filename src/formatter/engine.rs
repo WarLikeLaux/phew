@@ -110,7 +110,7 @@ fn format_attributes(attrs: &[Attribute]) -> String {
 }
 
 fn is_inline_content(children: &[Node]) -> bool {
-    children.len() <= 2 && children.iter().all(|c| matches!(c, Node::Text(_) | Node::PhpEcho(_)))
+    children.iter().all(|c| matches!(c, Node::Text(_) | Node::PhpEcho(_)))
 }
 
 fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> String {
