@@ -2,8 +2,11 @@
 
 use yii\helpers\Html;
 
+/**
+ * @var \common\models\Slider $model
+ */
+
 ?>
-<?php /** * @var \common\models\Slider $model */ ?>
 <?php if (!$model->img_alias): ?>
     <div class="slide">
         <a href="<?= $model->link ?>">
