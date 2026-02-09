@@ -18,7 +18,10 @@ $this->params['breadcrumbs'][] = $this->title; ?>
             <?= $form->field($model, 'status')
                 ->dropDownList(
                     $model->getStatusList(),
-                    ['prompt' => $model->isNewRecord ? Yii::t('app', 'Select status for new user account') : Yii::t('app', 'Change current status of existing user account')],
+                    ['prompt' => $model->isNewRecord ? Yii::t(
+                        'app',
+                        'Select status for new user account',
+                    ) : Yii::t('app', 'Change current status of existing user account')],
                 ) ?>
             <?php $buttonLabel = $model->isNewRecord
                 ? Yii::t('app', 'Create New User Account Now')

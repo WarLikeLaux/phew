@@ -35,7 +35,11 @@ use yii\bootstrap5\LinkPager;
                 [
                     'class' => 'yii\grid\ActionColumn',
                     'template' => '{view} {update} {delete}',
-                    'buttons' => ['delete' => static fn ($url, $m) => Html::a('<i class="bi bi-trash"></i>', $url, ['data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post']])],
+                    'buttons' => ['delete' => static fn ($url, $m) => Html::a(
+                        '<i class="bi bi-trash"></i>',
+                        $url,
+                        ['data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post']],
+                    )],
                 ],
             ],
         ]) ?>

@@ -10,7 +10,16 @@
             'label' => Yii::t('app', 'ui.books'),
             'url' => ['/book/index'],
             'visible' => !Yii::$app->user->isGuest,
-            'items' => [['label' => Yii::t('app', 'ui.book_list'), 'url' => ['/book/index']], ['label' => Yii::t('app', 'ui.book_create'), 'url' => ['/book/create']]],
+            'items' => [
+                [
+                    'label' => Yii::t('app', 'ui.book_list'),
+                    'url' => ['/book/index'],
+                ],
+                [
+                    'label' => Yii::t('app', 'ui.book_create'),
+                    'url' => ['/book/create'],
+                ],
+            ],
         ],
         [
             'label' => Yii::t('app', 'ui.authors'),
