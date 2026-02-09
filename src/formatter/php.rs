@@ -134,6 +134,79 @@ pub fn split_by_chain(code: &str) -> Vec<String> {
     parts
 }
 
+pub fn split_by_concat(code: &str) -> Vec<String> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut depth = 0i32;
+
+    while i < len {
+        let ch = chars[i];
+
+        if ch == '\'' || ch == '"' {
+            let quote = ch;
+            current.push(ch);
+            i += 1;
+            while i < len && chars[i] != quote {
+                if chars[i] == '\\' {
+                    current.push(chars[i]);
+                    i += 1;
+                    if i < len {
+                        current.push(chars[i]);
+                        i += 1;
+                    }
+                    continue;
+                }
+                current.push(chars[i]);
+                i += 1;
+            }
+            if i < len {
+                current.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+        }
+
+        if depth == 0 && ch == '.' {
+            let prev = current.trim_end().chars().last();
+            let mut j = i + 1;
+            while j < len && chars[j].is_whitespace() {
+                j += 1;
+            }
+            let next = if j < len { Some(chars[j]) } else { None };
+
+            let is_decimal_point = prev.is_some_and(|c| c.is_ascii_digit()) && next.is_some_and(|c| c.is_ascii_digit());
+
+            if prev.is_some() && next.is_some() && !is_decimal_point {
+                parts.push(current.trim_end().to_string());
+                current.clear();
+                i += 1;
+                while i < len && chars[i].is_whitespace() {
+                    i += 1;
+                }
+                continue;
+            }
+        }
+
+        current.push(ch);
+        i += 1;
+    }
+
+    if !current.trim().is_empty() {
+        parts.push(current.trim_end().to_string());
+    }
+
+    parts
+}
+
 pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
@@ -457,6 +530,15 @@ mod tests {
         assert_eq!(
             format_php_code("Html::encode($model->title)"),
             "Html::encode($model->title)"
+        );
+    }
+
+    #[test]
+    fn split_concat_expression() {
+        let code = "'a' . $b . 'c'";
+        assert_eq!(
+            split_by_concat(code),
+            vec!["'a'".to_string(), "$b".to_string(), "'c'".to_string()]
         );
     }
 }
