@@ -64,6 +64,15 @@ pub fn join_php_lines(code: &str) -> String {
         .replace(" ->", "->")
 }
 
+fn has_method_call_after(chars: &[char], start: usize) -> bool {
+    let len = chars.len();
+    let mut i = start;
+    while i < len && (chars[i].is_alphanumeric() || chars[i] == '_') {
+        i += 1;
+    }
+    i > start && i < len && chars[i] == '('
+}
+
 pub fn split_by_chain(code: &str) -> Vec<String> {
     let mut parts: Vec<String> = Vec::new();
     let mut current = String::new();
@@ -104,10 +113,14 @@ pub fn split_by_chain(code: &str) -> Vec<String> {
         }
 
         if depth == 0 && chars[i] == '-' && i + 1 < len && chars[i + 1] == '>' {
-            parts.push(current.trim_end().to_string());
-            current = String::from("->");
-            i += 2;
-            continue;
+            let prev = current.trim_end().chars().last().unwrap_or(' ');
+            let next_has_call = has_method_call_after(&chars, i + 2);
+            if prev == ')' || next_has_call {
+                parts.push(current.trim_end().to_string());
+                current = String::from("->");
+                i += 2;
+                continue;
+            }
         }
 
         current.push(chars[i]);
