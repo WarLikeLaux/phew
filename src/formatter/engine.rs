@@ -89,6 +89,35 @@ fn is_header_php_block(code: &str) -> bool {
     })
 }
 
+fn split_header_and_opener(code: &str) -> Option<(String, String)> {
+    if !is_php_block_opener(code) {
+        return None;
+    }
+    let normalized = normalize_statements(code);
+    let lines: Vec<&str> = normalized.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.len() < 2 {
+        return None;
+    }
+    let last = lines.last()?.trim();
+    let lower = last.to_lowercase();
+    let is_opener = (lower.starts_with("if ")
+        || lower.starts_with("if(")
+        || lower.starts_with("foreach ")
+        || lower.starts_with("foreach(")
+        || lower.starts_with("for ")
+        || lower.starts_with("for(")
+        || lower.starts_with("while ")
+        || lower.starts_with("while(")
+        || lower.starts_with("switch "))
+        && last.ends_with(':');
+    if !is_opener {
+        return None;
+    }
+    let header_lines: Vec<&str> = lines[..lines.len() - 1].to_vec();
+    let header = header_lines.join("\n");
+    Some((header, last.to_string()))
+}
+
 fn is_void_element(name: &str) -> bool {
     VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
 }
@@ -348,6 +377,80 @@ fn join_ternary_lines(code: &str) -> String {
     result.join("\n")
 }
 
+fn count_unescaped_quotes(line: &str, quote: char) -> usize {
+    let mut count = 0;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' {
+            i += 2;
+            continue;
+        }
+        if chars[i] == quote {
+            count += 1;
+        }
+        i += 1;
+    }
+    count
+}
+
+fn has_unclosed_string(line: &str) -> bool {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut in_str: Option<char> = None;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\\' && in_str.is_some() {
+            i += 2;
+            continue;
+        }
+        match in_str {
+            Some(q) if ch == q => in_str = None,
+            Some(_) => {}
+            None if ch == '\'' || ch == '"' => in_str = Some(ch),
+            _ => {}
+        }
+        i += 1;
+    }
+    in_str.is_some()
+}
+
+fn detect_open_quote(line: &str) -> Option<char> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut in_str: Option<char> = None;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\\' && in_str.is_some() {
+            i += 2;
+            continue;
+        }
+        match in_str {
+            Some(q) if ch == q => in_str = None,
+            Some(_) => {}
+            None if ch == '\'' || ch == '"' => in_str = Some(ch),
+            _ => {}
+        }
+        i += 1;
+    }
+    in_str
+}
+
+fn detect_heredoc(line: &str) -> Option<String> {
+    let pos = line.find("<<<")?;
+    let after = line[pos + 3..].trim();
+    if after.is_empty() {
+        return None;
+    }
+    let marker = after.trim_matches('\'').trim_matches('"');
+    let marker = marker.trim_end_matches(',');
+    if marker.chars().all(|c| c.is_alphanumeric() || c == '_') && !marker.is_empty() {
+        Some(marker.to_string())
+    } else {
+        None
+    }
+}
+
 fn reindent_php_block(code: &str, pad: &str) -> String {
     let needs_normalize = !code.contains('\n') && (code.contains(';') || has_switch_case(code));
     let code = if needs_normalize {
@@ -363,8 +466,38 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
     let mut prev_was_use = false;
     let mut prev_was_declare = false;
     let is_header = is_header_php_block(&code);
+    let mut in_string: Option<char> = None;
+    let mut heredoc_marker: Option<String> = None;
 
     for line in code.lines() {
+        if let Some(ref marker) = heredoc_marker {
+            result.push_str(line);
+            result.push('\n');
+            let closing = line.trim().trim_end_matches(';');
+            if closing == marker.as_str() {
+                let m = marker.clone();
+                heredoc_marker = None;
+                let after_marker = line.trim().strip_prefix(m.as_str()).unwrap_or("");
+                let (o, c) = count_brackets(after_marker);
+                depth += o as i32 - c as i32;
+                depth = depth.max(0);
+            }
+            continue;
+        }
+        if let Some(quote) = in_string {
+            result.push_str(line);
+            result.push('\n');
+            if count_unescaped_quotes(line, quote) % 2 == 1 {
+                in_string = None;
+                if let Some(pos) = line.rfind(quote) {
+                    let after_quote = &line[pos + 1..];
+                    let (o, c) = count_brackets(after_quote);
+                    depth += o as i32 - c as i32;
+                    depth = depth.max(0);
+                }
+            }
+            continue;
+        }
         let trimmed = line.trim();
         if trimmed.is_empty() {
             if !prev_blank && !first_content {
@@ -391,6 +524,11 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         prev_was_declare = is_declare;
         let formatted = format_php_code(trimmed);
         emit_reindented_line(&formatted, pad, &mut depth, &mut result);
+        if let Some(marker) = detect_heredoc(trimmed) {
+            heredoc_marker = Some(marker);
+        } else if has_unclosed_string(trimmed) {
+            in_string = detect_open_quote(trimmed);
+        }
     }
 
     result.trim_end_matches('\n').to_string() + "\n"
@@ -884,6 +1022,17 @@ fn emit_switch_stmt(trimmed: &str, state: &mut PhpDepthState, output: &mut Strin
 fn emit_multiline_php(code: &str, pad: &str, depth: &mut usize, output: &mut String) {
     let is_header = is_header_php_block(code);
     if is_header {
+        if let Some((header_code, opener_line)) = split_header_and_opener(code) {
+            output.push_str(&format!("{pad}<?php\n"));
+            let reindented = reindent_php_block(&header_code, pad);
+            output.push_str(&reindented);
+            output.push('\n');
+            output.push_str(&format!("{pad}?>\n"));
+            let formatted = format_php_code(&opener_line);
+            output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
+            *depth += 1;
+            return;
+        }
         output.push_str(&format!("{pad}<?php\n"));
         let reindented = reindent_php_block(code, pad);
         output.push_str(&reindented);
