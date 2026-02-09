@@ -1,0 +1,16 @@
+<?php
+
+use yii\helpers\Html;
+use yii\helpers\Url;
+
+/**
+ * @var \common\models\Page $model
+ */
+
+?>
+<?php if ($model->isActive()): ?>
+    <div class="page-content">
+        <h1><?= Html::encode($model->title) ?></h1>
+        <p><?= $model->content ?></p>
+    </div>
+<?php endif; ?>
