@@ -138,6 +138,30 @@ pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
                 i += 1;
             }
         } else if ch == '(' {
+            let prefix: String = chars[..i].iter().collect();
+            let trimmed = prefix.trim_end();
+            if trimmed.ends_with("fn") || trimmed.ends_with("function") {
+                let mut depth = 1i32;
+                i += 1;
+                while i < len && depth > 0 {
+                    if chars[i] == '\'' || chars[i] == '"' {
+                        let q = chars[i];
+                        i += 1;
+                        while i < len && chars[i] != q {
+                            if chars[i] == '\\' {
+                                i += 1;
+                            }
+                            i += 1;
+                        }
+                    } else if chars[i] == '(' {
+                        depth += 1;
+                    } else if chars[i] == ')' {
+                        depth -= 1;
+                    }
+                    i += 1;
+                }
+                continue;
+            }
             open_pos = Some(i);
             break;
         }

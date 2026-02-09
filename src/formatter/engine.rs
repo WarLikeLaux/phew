@@ -481,6 +481,12 @@ fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String
                 result.push_str(&expanded);
                 continue;
             }
+            if let Some(split) = try_split_long_line(arg, &inner_pad) {
+                let trimmed = split.trim_end_matches('\n');
+                result.push_str(trimmed);
+                result.push_str(",\n");
+                continue;
+            }
         }
         result.push_str(&format!("{inner_pad}{arg},\n"));
     }
@@ -539,6 +545,19 @@ fn expand_bare_sub_array(item: &str, pad: &str) -> Option<String> {
     let deeper_pad = format!("{pad}{INDENT}");
     let mut result = format!("{pad}[\n");
     for sub in &sub_items {
+        let sub_line_len = deeper_pad.len() + sub.len() + 1;
+        if sub_line_len > MAX_LINE_LENGTH {
+            if let Some(expanded) = expand_nested_array(sub, &deeper_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(split) = try_split_long_line(sub, &deeper_pad) {
+                let trimmed = split.trim_end_matches('\n');
+                result.push_str(trimmed);
+                result.push_str(",\n");
+                continue;
+            }
+        }
         result.push_str(&format!("{deeper_pad}{sub},\n"));
     }
     result.push_str(&format!("{pad}],\n"));
