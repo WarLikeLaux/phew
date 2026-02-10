@@ -11,7 +11,7 @@
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-57_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
 [![Fixtures](https://img.shields.io/badge/Fixtures-57_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.5.3-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-0.5.4-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
