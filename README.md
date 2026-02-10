@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-56_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-56_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.5.2-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-57_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-57_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.5.3-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -159,7 +159,7 @@ src/
 
 ## Тестирование
 
-**56 unit-тестов** по всем модулям:
+**57 unit-тестов** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
@@ -169,7 +169,7 @@ src/
 | `formatter::php` | 16 |
 | stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 6 |
 
-**56 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**57 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -229,6 +229,7 @@ src/
 | 54 | `chain_property` | Цепочки + property-access с длинными строковыми литералами |
 | 55 | `header_with_if` | Header-блок (`use`, docblock) + `if ... endif` |
 | 56 | `register_js_css` | `registerJs/registerCss` с heredoc/многострочными строками |
+| 57 | `inline_closure` | Inline-замыкания `function() { ... }` в массивах GridView |
 
 ```bash
 # Unit-тесты
