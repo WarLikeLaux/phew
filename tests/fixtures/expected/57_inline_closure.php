@@ -25,7 +25,7 @@ use yii\helpers\Html;
                         'previewPath' => $img->productImage->getAbsolutePath('preview'),
                     ],
                 );
-            }
+            },
         ],
         [
             'attribute' => 'name',
@@ -43,7 +43,7 @@ use yii\helpers\Html;
                     );
                 }
                 return '<span class="text-muted">не задан</span>';
-            }
+            },
         ],
         [
             'label' => 'Status',
