@@ -741,6 +741,10 @@ fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String
                 result.push_str(&expanded);
                 continue;
             }
+            if let Some(expanded) = expand_inline_closure(arg, &inner_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
             if let Some(split) = try_split_long_line(arg, &inner_pad) {
                 let trimmed = split.trim_end_matches('\n');
                 result.push_str(trimmed);
@@ -828,6 +832,10 @@ fn expand_bare_sub_array(item: &str, pad: &str) -> Option<String> {
                 result.push_str(&expanded);
                 continue;
             }
+            if let Some(expanded) = expand_inline_closure(sub, &deeper_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
             if let Some(split) = try_split_long_line(sub, &deeper_pad) {
                 let trimmed = split.trim_end_matches('\n');
                 result.push_str(trimmed);
@@ -838,6 +846,212 @@ fn expand_bare_sub_array(item: &str, pad: &str) -> Option<String> {
         result.push_str(&format!("{deeper_pad}{sub},\n"));
     }
     result.push_str(&format!("{pad}],\n"));
+    Some(result)
+}
+
+fn find_closure_body(code: &str) -> Option<(usize, usize)> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        if chars[i] == 'f'
+            && i + 8 < len
+            && chars[i + 1] == 'u'
+            && chars[i + 2] == 'n'
+            && chars[i + 3] == 'c'
+            && chars[i + 4] == 't'
+            && chars[i + 5] == 'i'
+            && chars[i + 6] == 'o'
+            && chars[i + 7] == 'n'
+        {
+            if i > 0 && chars[i - 1].is_alphanumeric() {
+                i += 1;
+                continue;
+            }
+            let mut j = i + 8;
+            while j < len && chars[j] != '{' {
+                j += 1;
+            }
+            if j < len {
+                if let Some(close) = find_matching_close(&chars, j) {
+                    return Some((j, close));
+                }
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn normalize_closure_body(body: &str) -> Vec<String> {
+    let chars: Vec<char> = body.chars().collect();
+    let len = chars.len();
+    let mut statements: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let mut i = 0;
+    let mut brace_depth: i32 = 0;
+    let mut paren_depth: i32 = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            current.push(ch);
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    current.push(chars[i]);
+                    i += 1;
+                    if i < len {
+                        current.push(chars[i]);
+                        i += 1;
+                    }
+                    continue;
+                }
+                current.push(chars[i]);
+                i += 1;
+            }
+            if i < len {
+                current.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if ch == '(' {
+            paren_depth += 1;
+        } else if ch == ')' {
+            paren_depth -= 1;
+        } else if ch == '{' {
+            brace_depth += 1;
+        } else if ch == '}' && brace_depth > 0 {
+            brace_depth -= 1;
+            current.push(ch);
+            if brace_depth == 0 {
+                let trimmed = current.trim().to_string();
+                if !trimmed.is_empty() {
+                    statements.push(trimmed);
+                }
+                current.clear();
+                i += 1;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        current.push(ch);
+        if ch == ';' && brace_depth == 0 && paren_depth <= 0 {
+            let trimmed = current.trim().to_string();
+            if !trimmed.is_empty() {
+                statements.push(trimmed);
+            }
+            current.clear();
+        }
+        i += 1;
+    }
+    let trimmed = current.trim().to_string();
+    if !trimmed.is_empty() {
+        statements.push(trimmed);
+    }
+    statements
+}
+
+fn find_brace_block(code: &str) -> Option<(usize, usize)> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        if chars[i] == '\'' || chars[i] == '"' {
+            let q = chars[i];
+            i += 1;
+            while i < len && chars[i] != q {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+        if chars[i] == '{' {
+            if let Some(close) = find_matching_close(&chars, i) {
+                return Some((i, close));
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn expand_brace_block(stmt: &str, pad: &str) -> Option<String> {
+    let (open, close) = find_brace_block(stmt)?;
+    let chars: Vec<char> = stmt.chars().collect();
+    let body: String = chars[open + 1..close].iter().collect();
+    let body = body.trim();
+    if body.is_empty() {
+        return None;
+    }
+    let header: String = chars[..open].iter().collect();
+    let header = header.trim_end();
+    let after: String = chars[close + 1..].iter().collect();
+    let after = after.trim();
+    let inner_pad = format!("{pad}{INDENT}");
+    let body_stmts = normalize_closure_body(body);
+    if body_stmts.is_empty() {
+        return None;
+    }
+    let mut result = format!("{pad}{header} {{\n");
+    for s in &body_stmts {
+        let line_len = inner_pad.len() + s.len();
+        if line_len > MAX_LINE_LENGTH {
+            if let Some(split) = try_split_long_line(s, &inner_pad) {
+                result.push_str(&split);
+                continue;
+            }
+        }
+        result.push_str(&format!("{inner_pad}{s}\n"));
+    }
+    if after.is_empty() {
+        result.push_str(&format!("{pad}}}\n"));
+    } else {
+        result.push_str(&format!("{pad}}} {after}\n"));
+    }
+    Some(result)
+}
+
+fn expand_inline_closure(arg: &str, pad: &str) -> Option<String> {
+    let (open_brace, close_brace) = find_closure_body(arg)?;
+    let chars: Vec<char> = arg.chars().collect();
+    let body: String = chars[open_brace + 1..close_brace].iter().collect();
+    let stmts = normalize_closure_body(&body);
+    if stmts.len() <= 1 {
+        return None;
+    }
+    let header: String = chars[..open_brace].iter().collect();
+    let header = header.trim_end();
+    let after_close: String = chars[close_brace + 1..].iter().collect();
+    let after_close = after_close.trim_start();
+    let body_pad = format!("{pad}{INDENT}");
+    let mut result = format!("{pad}{header} {{\n");
+    for stmt in &stmts {
+        if let Some(expanded) = expand_brace_block(stmt, &body_pad) {
+            result.push_str(&expanded);
+            continue;
+        }
+        let line_len = body_pad.len() + stmt.len();
+        if line_len > MAX_LINE_LENGTH {
+            if let Some(split) = try_split_long_line(stmt, &body_pad) {
+                result.push_str(&split);
+                continue;
+            }
+        }
+        result.push_str(&format!("{body_pad}{stmt}\n"));
+    }
+    if after_close.is_empty() {
+        result.push_str(&format!("{pad}}}\n"));
+    } else {
+        result.push_str(&format!("{pad}}}{after_close}\n"));
+    }
     Some(result)
 }
 
@@ -884,6 +1098,10 @@ fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
             }
             if let Some(bare) = expand_bare_sub_array(item, &nested_pad) {
                 result.push_str(&bare);
+                continue;
+            }
+            if let Some(expanded) = expand_inline_closure(item, &nested_pad) {
+                result.push_str(&expanded);
                 continue;
             }
             if let Some(split) = try_split_long_line(item, &nested_pad) {
