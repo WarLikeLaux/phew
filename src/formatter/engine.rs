@@ -1048,7 +1048,7 @@ fn expand_inline_closure(arg: &str, pad: &str) -> Option<String> {
         result.push_str(&format!("{body_pad}{stmt}\n"));
     }
     if after_close.is_empty() {
-        result.push_str(&format!("{pad}}}\n"));
+        result.push_str(&format!("{pad}}},\n"));
     } else {
         result.push_str(&format!("{pad}}}{after_close}\n"));
     }
