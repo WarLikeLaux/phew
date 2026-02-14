@@ -172,46 +172,41 @@ pub fn skip_string_literal(chars: &[char], start: usize, result: &mut String) ->
     i
 }
 
-fn handle_comment_boundaries(chars: &[char], i: usize, ch: char, result: &mut String) {
-    if ch == '/'
-        && i + 1 < chars.len()
-        && chars[i + 1] == '*'
-        && i + 2 < chars.len()
-        && chars[i + 2] == '*'
-        && !result.ends_with('\n')
-        && result.len() > 1
-    {
-        let last = result.pop().unwrap_or_default();
-        result.push('\n');
-        result.push(last);
+fn expand_inline_docblock(comment: &str) -> String {
+    let trimmed = comment.trim();
+    if !trimmed.starts_with("/**") || !trimmed.ends_with("*/") {
+        return comment.to_string();
     }
-    if ch == '/' && result.len() >= 2 && result.ends_with("*/") {
-        result.pop();
-        result.pop();
-        if !result.ends_with('\n') {
-            let trimmed = result.trim_end().to_string();
-            result.clear();
-            result.push_str(&trimmed);
-            result.push('\n');
+    let inner = &trimmed[3..trimmed.len() - 2].trim();
+
+    if !inner.contains("* @") {
+        return comment.to_string();
+    }
+
+    let mut bodies: Vec<&str> = Vec::new();
+    let mut rest = *inner;
+    while let Some(pos) = rest.find("* @") {
+        let before = rest[..pos].trim().trim_end_matches('*').trim();
+        if !before.is_empty() {
+            bodies.push(before);
         }
-        result.push_str("*/\n");
-        if i + 1 < chars.len() && chars[i + 1] != '\n' {
-            result.push('\n');
-        }
+        rest = &rest[pos + 2..];
     }
-    if ch == '*'
-        && i + 1 < chars.len()
-        && chars[i + 1] == ' '
-        && i + 2 < chars.len()
-        && chars[i + 2] == '@'
-        && !result.ends_with('\n')
-        && !result.ends_with('/')
-        && !result.ends_with("/**")
-    {
-        result.pop();
-        result.push('\n');
-        result.push(ch);
+    let last = rest.trim().trim_end_matches('*').trim();
+    if !last.is_empty() {
+        bodies.push(last);
     }
+
+    if bodies.len() <= 1 {
+        return comment.to_string();
+    }
+
+    let mut result = String::from("/**\n");
+    for body in &bodies {
+        result.push_str(&format!(" * {body}\n"));
+    }
+    result.push_str(" */");
+    result
 }
 
 pub fn normalize_statements(code: &str) -> String {
@@ -225,6 +220,37 @@ pub fn normalize_statements(code: &str) -> String {
         let ch = chars[i];
         if ch == '\'' || ch == '"' {
             i = skip_string_literal(&chars, i, &mut result);
+            continue;
+        }
+        if ch == '/' && i + 1 < len && chars[i + 1] == '*' {
+            if !result.ends_with('\n') && result.trim_end().len() > 1 {
+                let last = result.pop().unwrap_or_default();
+                if last != ' ' && last != '\n' {
+                    result.push(last);
+                }
+                if !result.ends_with('\n') {
+                    result.push('\n');
+                }
+            }
+            let mut comment = String::from("/*");
+            i += 2;
+            while i < len {
+                comment.push(chars[i]);
+                if chars[i] == '*' && i + 1 < len && chars[i + 1] == '/' {
+                    comment.push(chars[i + 1]);
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            let expanded = expand_inline_docblock(&comment);
+            result.push_str(&expanded);
+            if !result.ends_with('\n') {
+                result.push('\n');
+            }
+            if i < len && chars[i] != '\n' {
+                result.push('\n');
+            }
             continue;
         }
         if ch == '(' {
@@ -246,7 +272,6 @@ pub fn normalize_statements(code: &str) -> String {
             result.push('\n');
         }
 
-        handle_comment_boundaries(&chars, i, ch, &mut result);
         i += 1;
     }
 
