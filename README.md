@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-57_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-57_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.5.4-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-66_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-64_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.5.6-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -135,8 +135,12 @@ src/
 │   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (236 строк)
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
-│   ├── engine.rs        # Движок форматирования (1596 строк)
-│   ├── php.rs           # PHP: keyword spacing, assignment spacing, fat arrow, splitting (603 строки)
+│   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (567 строк)
+│   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (638 строк)
+│   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (543 строки)
+│   ├── echo.rs          # Форматирование PHP echo: chain, concat, ternary (171 строка)
+│   ├── docblock.rs      # Работа с docblock: expand, merge, flush (171 строка)
+│   ├── php.rs           # PHP: keyword spacing, assignment, fat arrow, splitting (603 строки)
 │   ├── html.rs          # HTML-правила (заглушка)
 │   └── yii.rs           # Yii 2 паттерны (заглушка)
 └── io/
@@ -159,17 +163,18 @@ src/
 
 ## Тестирование
 
-**57 unit-тестов** по всем модулям:
+**66 unit-тестов** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
 | `parser::lexer` | 21 |
 | `parser::ast` | 6 |
 | `formatter::engine` | 7 |
+| `formatter::docblock` | 11 |
 | `formatter::php` | 16 |
-| stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 6 |
+| stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 5 |
 
-**57 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**64 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -230,6 +235,13 @@ src/
 | 55 | `header_with_if` | Header-блок (`use`, docblock) + `if ... endif` |
 | 56 | `register_js_css` | `registerJs/registerCss` с heredoc/многострочными строками |
 | 57 | `inline_closure` | Inline-замыкания `function() { ... }` в массивах GridView |
+| 58 | `php_comment_close_tag` | `?>` внутри PHP-комментариев |
+| 59 | `unclosed_tags` | Незакрытые HTML-теги |
+| 60 | `php_in_html_attrs` | PHP внутри HTML-атрибутов (сложный) |
+| 61 | `if_else_echo_branches` | if/else ветки с echo |
+| 62 | `full_header_block` | Полный header-блок (declare, namespace, use, docblock) |
+| 63 | `mixed_echo_block_inline` | Смешанные echo-блоки и inline PHP |
+| 64 | `docblock_merge` | Слияние нескольких docblock в один |
 
 ```bash
 # Unit-тесты
@@ -262,7 +274,8 @@ just fixtures       # или ./bin/check-fixtures
 | **0.2** | Обработка PHP-блоков, line splitting, fixtures | ✅ |
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
-| **0.5** | Конфиг `.phew.toml` | 🔜 |
+| **0.5** | Docblock merge, decompose engine.rs → 5 modules, 64 fixtures, 66 tests | ✅ |
+| **0.6** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 
 ## Политика форматирования
