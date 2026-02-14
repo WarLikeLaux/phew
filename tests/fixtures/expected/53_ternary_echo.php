@@ -1,8 +1,8 @@
 <?php
 
+use app\models\User;
 use yii\helpers\Html;
 use yii\widgets\ActiveForm;
-use app\models\User;
 
 ?>
 <?php $title = $model->isNewRecord
