@@ -1,5 +1,23 @@
 use super::indent::emit_reindented_line;
 
+fn normalize_var_body(body: &str) -> String {
+    if !body.starts_with("@var ") {
+        return body.to_string();
+    }
+    let rest = body[5..].trim();
+    let parts: Vec<&str> = rest.splitn(3, ' ').collect();
+    if parts.len() >= 2 && parts[0].starts_with('$') && !parts[1].starts_with('$') {
+        let var_name = parts[0];
+        let type_name = parts[1];
+        return if parts.len() == 3 {
+            format!("@var {type_name} {var_name} {}", parts[2])
+        } else {
+            format!("@var {type_name} {var_name}")
+        };
+    }
+    body.to_string()
+}
+
 pub fn expand_single_line_docblock(code: &str) -> Option<String> {
     let trimmed = code.trim();
     if trimmed.contains('\n') || !trimmed.starts_with("/**") || !trimmed.ends_with("*/") {
@@ -30,7 +48,7 @@ pub fn extract_docblock_body(code: &str) -> Option<String> {
     if body.is_empty() {
         return None;
     }
-    Some(body.to_string())
+    Some(normalize_var_body(body))
 }
 
 pub fn merge_docblock_bodies(bodies: &[String]) -> String {
@@ -167,5 +185,28 @@ mod tests {
     #[test]
     fn not_docblock_only() {
         assert!(!is_docblock_only("$x = 1;"));
+    }
+
+    #[test]
+    fn normalize_var_reversed_order() {
+        assert_eq!(normalize_var_body("@var $model User"), "@var User $model");
+    }
+
+    #[test]
+    fn normalize_var_correct_order_unchanged() {
+        assert_eq!(normalize_var_body("@var User $model"), "@var User $model");
+    }
+
+    #[test]
+    fn normalize_var_non_var_unchanged() {
+        assert_eq!(normalize_var_body("@return string"), "@return string");
+    }
+
+    #[test]
+    fn extract_body_normalizes_var_order() {
+        assert_eq!(
+            extract_docblock_body("/** @var $this yii\\web\\View */"),
+            Some("@var yii\\web\\View $this".to_string())
+        );
     }
 }
