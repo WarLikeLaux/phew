@@ -1,0 +1,1 @@
+<?php echo Html::encode($model->title) ?><?php echo $this->render('_partial', ['model' => $model]) ?><?= Html::tag('span', $model->name, ['class' => 'label']) ?><?php echo Html::a(Yii::t('app', 'ui.edit'), ['update', 'id' => $model->id], ['class' => 'btn btn-primary']) ?>
