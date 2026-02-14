@@ -67,10 +67,14 @@ pub fn is_switch_case_peer(code: &str) -> bool {
 }
 
 pub fn is_header_php_block(code: &str) -> bool {
-    code.lines().any(|line| {
+    let has_by_line = code.lines().any(|line| {
         let t = line.trim();
         t.starts_with("use ") || t.starts_with("declare(")
-    })
+    });
+    if has_by_line {
+        return true;
+    }
+    code.contains(" use ") || code.contains(";use ") || code.starts_with("use ")
 }
 
 pub fn split_header_and_opener(code: &str) -> Option<(String, String)> {
@@ -209,12 +213,66 @@ fn expand_inline_docblock(comment: &str) -> String {
     result
 }
 
+fn emit_block_comment_break(result: &mut String) {
+    if !result.ends_with('\n') && result.trim_end().len() > 1 {
+        let last = result.pop().unwrap_or_default();
+        if last != ' ' && last != '\n' {
+            result.push(last);
+        }
+        if !result.ends_with('\n') {
+            result.push('\n');
+        }
+    }
+}
+
+fn collect_block_comment(chars: &[char], start: usize) -> (String, usize) {
+    let mut comment = String::from("/*");
+    let mut i = start + 2;
+    let len = chars.len();
+    while i < len {
+        comment.push(chars[i]);
+        if chars[i] == '*' && i + 1 < len && chars[i + 1] == '/' {
+            comment.push(chars[i + 1]);
+            i += 2;
+            return (comment, i);
+        }
+        i += 1;
+    }
+    (comment, i)
+}
+
+fn push_brace_breaks(ch: char, brace_depth: i32, next_char: Option<char>, result: &mut String) -> bool {
+    if ch == '{' && brace_depth > 0 && next_char.is_some_and(|c| c != '\n') {
+        result.push(ch);
+        result.push('\n');
+        return true;
+    }
+    if ch == '}' && brace_depth >= 0 && !result.ends_with('\n') {
+        result.push('\n');
+    }
+    false
+}
+
+fn process_block_comment(chars: &[char], start: usize, result: &mut String) -> usize {
+    emit_block_comment_break(result);
+    let (comment, i) = collect_block_comment(chars, start);
+    result.push_str(&expand_inline_docblock(&comment));
+    if !result.ends_with('\n') {
+        result.push('\n');
+    }
+    if i < chars.len() && chars[i] != '\n' {
+        result.push('\n');
+    }
+    i
+}
+
 pub fn normalize_statements(code: &str) -> String {
     let mut result = String::from("\n");
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
     let mut i = 0;
     let mut paren_depth: i32 = 0;
+    let mut brace_depth: i32 = 0;
 
     while i < len {
         let ch = chars[i];
@@ -223,42 +281,21 @@ pub fn normalize_statements(code: &str) -> String {
             continue;
         }
         if ch == '/' && i + 1 < len && chars[i + 1] == '*' {
-            if !result.ends_with('\n') && result.trim_end().len() > 1 {
-                let last = result.pop().unwrap_or_default();
-                if last != ' ' && last != '\n' {
-                    result.push(last);
-                }
-                if !result.ends_with('\n') {
-                    result.push('\n');
-                }
-            }
-            let mut comment = String::from("/*");
-            i += 2;
-            while i < len {
-                comment.push(chars[i]);
-                if chars[i] == '*' && i + 1 < len && chars[i + 1] == '/' {
-                    comment.push(chars[i + 1]);
-                    i += 2;
-                    break;
-                }
-                i += 1;
-            }
-            let expanded = expand_inline_docblock(&comment);
-            result.push_str(&expanded);
-            if !result.ends_with('\n') {
-                result.push('\n');
-            }
-            if i < len && chars[i] != '\n' {
-                result.push('\n');
-            }
+            i = process_block_comment(&chars, i, &mut result);
             continue;
         }
-        if ch == '(' {
-            paren_depth += 1;
-        } else if ch == ')' {
-            paren_depth -= 1;
+        match ch {
+            '(' => paren_depth += 1,
+            ')' => paren_depth -= 1,
+            '{' => brace_depth += 1,
+            '}' => brace_depth -= 1,
+            _ => {}
         }
-
+        let next = if i + 1 < len { Some(chars[i + 1]) } else { None };
+        if push_brace_breaks(ch, brace_depth, next, &mut result) {
+            i += 1;
+            continue;
+        }
         if paren_depth <= 0
             && !result.ends_with('\n')
             && !result.trim_end().is_empty()
@@ -266,15 +303,16 @@ pub fn normalize_statements(code: &str) -> String {
         {
             result.push('\n');
         }
-
         result.push(ch);
-        if ch == ';' && paren_depth <= 0 && i + 1 < len && chars[i + 1] != '\n' {
+        let next_is_nl = next.is_some_and(|c| c == '\n');
+        if ch == ';' && paren_depth <= 0 && !next_is_nl {
             result.push('\n');
         }
-
+        if ch == ',' && brace_depth > 0 && paren_depth <= 0 && !next_is_nl {
+            result.push('\n');
+        }
         i += 1;
     }
-
     result
 }
 
@@ -469,7 +507,6 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
     let mut prev_blank = false;
     let mut first_content = true;
     let mut prev_was_doc_close = false;
-    let mut prev_was_use = false;
     let mut prev_was_declare = false;
     let is_header = is_header_php_block(&code);
     let mut in_string: Option<char> = None;
@@ -585,12 +622,11 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
             prev_blank = false;
         } else if has_pending && (is_use_import || is_declare) {
             deferred_lines.push(trimmed.to_string());
-            prev_was_use = is_use_import;
             prev_was_declare = is_declare;
             continue;
         }
 
-        if (prev_was_use && !is_use_import && !prev_blank) || (prev_was_declare && !is_declare && !prev_blank) {
+        if prev_was_declare && !is_declare && !prev_blank {
             result.push('\n');
         }
         if prev_was_doc_close && !prev_blank {
@@ -598,12 +634,10 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
         }
         prev_blank = false;
         prev_was_doc_close = trimmed == "*/";
-        prev_was_use = is_use_import;
         prev_was_declare = is_declare;
 
         if let Some(body) = extract_docblock_body(trimmed) {
             pending_docblocks.push(body);
-            prev_was_use = false;
             prev_was_declare = false;
             continue;
         }
@@ -646,6 +680,12 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
     sort_use_lines(&result)
 }
 
+fn use_namespace_prefix(line: &str) -> String {
+    let trimmed = line.trim();
+    let path = trimmed.strip_prefix("use ").unwrap_or(trimmed).trim_start_matches('\\');
+    path.split('\\').next().unwrap_or("").to_lowercase()
+}
+
 fn sort_use_lines(code: &str) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let mut result: Vec<String> = Vec::new();
@@ -660,8 +700,19 @@ fn sort_use_lines(code: &str) -> String {
                 i += 1;
             }
             use_group.sort_by_key(|a| a.trim().to_lowercase());
+            use_group.dedup_by(|a, b| a.trim() == b.trim());
+
+            let mut prev_prefix = String::new();
             for line in use_group {
+                let prefix = use_namespace_prefix(line);
+                if !prev_prefix.is_empty() && prefix != prev_prefix {
+                    result.push(String::new());
+                }
+                prev_prefix = prefix;
                 result.push(line.to_string());
+            }
+            if i < lines.len() && !lines[i].trim().is_empty() {
+                result.push(String::new());
             }
         } else {
             result.push(lines[i].to_string());
