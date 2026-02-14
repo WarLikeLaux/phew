@@ -1,8 +1,6 @@
 use super::indent::{INDENT, MAX_LINE_LENGTH, contains_outside_strings};
-use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_commas, split_by_concat};
-use super::split::{
-    expand_bare_array, expand_bare_sub_array, expand_nested_array, find_ternary_positions, try_split_long_line,
-};
+use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
+use super::split::{expand_bare_array, expand_nested_array, find_ternary_positions, try_split_long_line};
 
 pub fn is_single_echo_block(code: &str) -> bool {
     let trimmed = code.trim();
@@ -47,47 +45,6 @@ fn format_echo_concat(parts: &[String], pad: &str) -> String {
     result
 }
 
-fn format_echo_array_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> Option<String> {
-    let last = &args[args.len() - 1];
-    if !last.starts_with('[') || !last.ends_with(']') {
-        return None;
-    }
-    let inline_parts: Vec<&str> = args[..args.len() - 1].iter().map(|s| s.as_str()).collect();
-    let inline_joined = inline_parts.join(", ");
-    let inline_prefix = format!("{pad}<?= {prefix}{inline_joined}, [");
-    if inline_prefix.len() > MAX_LINE_LENGTH {
-        return None;
-    }
-    let inner = &last[1..last.len() - 1];
-    let items = split_by_commas(inner);
-    if items.len() <= 1 {
-        return None;
-    }
-    let inner_pad = format!("{pad}{INDENT}");
-    let mut result = format!("{pad}<?= {prefix}{inline_joined}, [\n");
-    for item in &items {
-        if inner_pad.len() + item.len() + 1 > MAX_LINE_LENGTH {
-            if let Some(expanded) = expand_nested_array(item, &inner_pad) {
-                result.push_str(&expanded);
-                continue;
-            }
-            if let Some(bare) = expand_bare_sub_array(item, &inner_pad) {
-                result.push_str(&bare);
-                continue;
-            }
-            if let Some(split) = try_split_long_line(item, &inner_pad) {
-                let trimmed = split.trim_end_matches('\n');
-                result.push_str(trimmed);
-                result.push_str(",\n");
-                continue;
-            }
-        }
-        result.push_str(&format!("{inner_pad}{item},\n"));
-    }
-    result.push_str(&format!("{pad}]{suffix} ?>\n"));
-    Some(result)
-}
-
 fn split_ternary(code: &str, pad: &str) -> Option<String> {
     let (q_pos, c_pos) = find_ternary_positions(code)?;
 
@@ -126,11 +83,6 @@ pub fn format_echo(code: &str, pad: &str) -> String {
     }
 
     if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
-        if args.len() >= 2 {
-            if let Some(r) = format_echo_array_split(&prefix, &args, &suffix, pad) {
-                return r;
-            }
-        }
         let mut result = format!("{pad}<?= {prefix}\n");
         let inner_pad = format!("{pad}{INDENT}");
         for arg in &args {
@@ -150,6 +102,10 @@ pub fn format_echo(code: &str, pad: &str) -> String {
                     result.push_str(",\n");
                     continue;
                 }
+            }
+            if let Some(expanded) = expand_bare_array(arg, &inner_pad) {
+                result.push_str(&expanded);
+                continue;
             }
             result.push_str(&format!("{inner_pad}{arg},\n"));
         }

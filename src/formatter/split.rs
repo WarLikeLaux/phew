@@ -173,6 +173,10 @@ pub fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> St
                 continue;
             }
         }
+        if let Some(expanded) = expand_bare_array(arg, &inner_pad) {
+            result.push_str(&expanded);
+            continue;
+        }
         result.push_str(&format!("{inner_pad}{arg},\n"));
     }
     result.push_str(&format!("{pad}{suffix}\n"));
