@@ -1,0 +1,40 @@
+<?= \yii\bootstrap5\Nav::widget([
+    'options' => ['class' => 'navbar-nav'],
+    'items' => [
+        [
+            'label' => Yii::t('app', 'ui.home'),
+            'url' => ['/site/index'],
+        ],
+        [
+            'label' => Yii::t('app', 'ui.catalog'),
+            'items' => [
+                [
+                    'label' => Yii::t('app', 'ui.books'),
+                    'url' => ['/book/index'],
+                ],
+                [
+                    'label' => Yii::t('app', 'ui.authors'),
+                    'url' => ['/author/index'],
+                ],
+                [
+                    'label' => Yii::t('app', 'ui.publishers'),
+                    'items' => [
+                        [
+                            'label' => Yii::t('app', 'ui.domestic'),
+                            'url' => ['/publisher/index', 'type' => 'domestic'],
+                        ],
+                        [
+                            'label' => Yii::t('app', 'ui.foreign'),
+                            'url' => ['/publisher/index', 'type' => 'foreign'],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'label' => Yii::t('app', 'ui.reports'),
+            'url' => ['/report/index'],
+            'visible' => Yii::$app->user->can('admin'),
+        ],
+    ],
+]) ?>

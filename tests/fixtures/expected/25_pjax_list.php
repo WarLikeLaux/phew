@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use yii\bootstrap5\LinkPager;
+use yii\grid\GridView;
 use yii\helpers\Html;
 use yii\widgets\Pjax;
-use yii\grid\GridView;
-use yii\bootstrap5\LinkPager;
 
 ?>
 <div class="list-page">

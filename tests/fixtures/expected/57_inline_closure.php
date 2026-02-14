@@ -1,6 +1,7 @@
 <?php
 
 use backend\widgets\StatusCircleWidget;
+
 use yii\grid\GridView;
 use yii\helpers\Html;
 
@@ -34,7 +35,10 @@ use yii\helpers\Html;
                 if ($model->productType) {
                     return Html::a(
                         $model->productType->name,
-                        ['grouped-attrs/update', 'id' => $model->product_type],
+                        [
+                            'grouped-attrs/update',
+                            'id' => $model->product_type,
+                        ],
                         [
                             'title' => 'Редактировать вид продукции',
                             'target' => '_blank',

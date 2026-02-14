@@ -1,0 +1,18 @@
+<?= GridView::widget([
+    'dataProvider' => $dataProvider,
+    'columns' => [
+        ['class' => 'yii\grid\SerialColumn'],
+        [
+            'attribute' => 'tags',
+            'value' => static fn ($m) => implode(', ', $m->tags),
+        ],
+        [
+            'attribute' => 'sizes',
+            'format' => 'raw',
+            'value' => static fn ($m) => implode(
+                ' ',
+                array_map(static fn ($s) => Html::tag('span', $s, ['class' => 'badge bg-info']), $m->sizes),
+            ),
+        ],
+    ],
+]) ?>

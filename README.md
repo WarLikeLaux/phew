@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-57_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-57_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.5.4-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-70_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-89_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.6.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -51,6 +51,8 @@ View-файлы в Yii 2 - это `.php`, внутри которых HTML, PHP-
 - ✅ Рекурсивный обход директорий (`.php` и `.html`)
 - ✅ Trailing comma в многострочных вызовах
 - ✅ Пустая строка после `use`-блока и перед закрывающим `?>`
+- ✅ PSR-12 порядок: `declare` → `use` → docblock
+- ✅ Алфавитная сортировка `use` statements
 - ✅ POSIX EOF: файл заканчивается ровно одним `\n`, без лишней пустой строки
 - ✅ Header-блоки PHP (declare, namespace, use) с правильным форматированием
 - ✅ CLI: `--write`, `--tokens`, `--tree`, поддержка файлов и директорий
@@ -135,8 +137,12 @@ src/
 │   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (236 строк)
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
-│   ├── engine.rs        # Движок форматирования (1596 строк)
-│   ├── php.rs           # PHP: keyword spacing, assignment spacing, fat arrow, splitting (603 строки)
+│   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (567 строк)
+│   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (724 строки)
+│   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (547 строк)
+│   ├── echo.rs          # Форматирование PHP echo: chain, concat, ternary (127 строк)
+│   ├── docblock.rs      # Работа с docblock: expand, merge, flush, var normalization (212 строк)
+│   ├── php.rs           # PHP: keyword spacing, assignment, fat arrow, splitting (603 строки)
 │   ├── html.rs          # HTML-правила (заглушка)
 │   └── yii.rs           # Yii 2 паттерны (заглушка)
 └── io/
@@ -159,17 +165,18 @@ src/
 
 ## Тестирование
 
-**57 unit-тестов** по всем модулям:
+**70 unit-тестов** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
 | `parser::lexer` | 21 |
 | `parser::ast` | 6 |
 | `formatter::engine` | 7 |
+| `formatter::docblock` | 15 |
 | `formatter::php` | 16 |
-| stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 6 |
+| stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 5 |
 
-**57 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**89 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -230,6 +237,38 @@ src/
 | 55 | `header_with_if` | Header-блок (`use`, docblock) + `if ... endif` |
 | 56 | `register_js_css` | `registerJs/registerCss` с heredoc/многострочными строками |
 | 57 | `inline_closure` | Inline-замыкания `function() { ... }` в массивах GridView |
+| 58 | `php_comment_close_tag` | `?>` внутри PHP-комментариев |
+| 59 | `unclosed_tags` | Незакрытые HTML-теги |
+| 60 | `php_in_html_attrs` | PHP внутри HTML-атрибутов (сложный) |
+| 61 | `if_else_echo_branches` | if/else ветки с echo |
+| 62 | `full_header_block` | Полный header-блок (declare, namespace, use, docblock) |
+| 63 | `mixed_echo_block_inline` | Смешанные echo-блоки и inline PHP |
+| 64 | `docblock_merge` | Слияние нескольких docblock в один |
+| 65 | `use_sorting` | Сортировка use statements по алфавиту |
+| 66 | `use_dedup` | Удаление дублей use statements |
+| 67 | `use_grouping` | Группировка use по namespace |
+| 68 | `header_reorder` | Перестановка declare → use → docblock |
+| 69 | `docblock_var_types` | Нормализация @var $name Type → @var Type $name |
+| 70 | `trailing_comma_enforce` | Trailing comma в аргументах вызовов |
+| 71 | `gridview_action_buttons` | GridView с колонками и кнопками |
+| 72 | `form_with_tabs` | Форма с табами |
+| 73 | `menu_widget` | Yii2 Menu widget |
+| 74 | `dynamic_columns` | Динамическое построение колонок |
+| 75 | `widget_options_chain` | Цепочка опций виджета |
+| 76 | `php_in_js_data` | PHP-данные внутри JS |
+| 77 | `multiline_concat_echo` | Многострочная конкатенация в echo |
+| 78 | `nested_ternary` | Вложенные тернарные операторы |
+| 79 | `array_of_arrays` | Массив массивов |
+| 80 | `mixed_indent_input` | Смешанные отступы на входе |
+| 81 | `empty_lines_in_block` | Пустые строки внутри PHP-блока |
+| 82 | `php_nowdoc` | PHP Nowdoc синтаксис |
+| 83 | `arrow_function_multiline` | Многострочные arrow-функции |
+| 84 | `null_coalescing_chain` | Цепочка null coalescing |
+| 85 | `match_expression` | PHP match expression |
+| 86 | `idempotent_check` | Идемпотентность: повторный прогон |
+| 87 | `mixed_echo_styles` | Смешанные стили echo |
+| 88 | `consecutive_php_blocks` | Последовательные PHP-блоки |
+| 89 | `widget_config_spread` | Spread конфига виджета |
 
 ```bash
 # Unit-тесты
@@ -262,7 +301,9 @@ just fixtures       # или ./bin/check-fixtures
 | **0.2** | Обработка PHP-блоков, line splitting, fixtures | ✅ |
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
-| **0.5** | Конфиг `.phew.toml` | 🔜 |
+| **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 65 fixtures, 66 tests | ✅ |
+| **0.6** | Use dedup/grouping, @var normalization, brace/comma breaks, 89 fixtures, 70 tests | ✅ |
+| **0.7** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 
 ## Политика форматирования

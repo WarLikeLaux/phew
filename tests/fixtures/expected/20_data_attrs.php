@@ -1,14 +1,28 @@
 <div class="actions">
     <p>
-        <?= Html::a(Yii::t('app', 'ui.delete'), ['delete', 'id' => $model->id], [
-            'class' => 'btn btn-danger',
-            'data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post', 'pjax' => '0'],
-        ]) ?>
+        <?= Html::a(
+            Yii::t('app', 'ui.delete'),
+            [
+                'delete',
+                'id' => $model->id,
+            ],
+            [
+                'class' => 'btn btn-danger',
+                'data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post', 'pjax' => '0'],
+            ],
+        ) ?>
     </p>
     <p>
-        <?= Html::a(Yii::t('app', 'ui.archive'), ['archive', 'id' => $model->id], [
-            'class' => 'btn btn-warning',
-            'data' => ['confirm' => Yii::t('app', 'ui.confirm_archive'), 'method' => 'post'],
-        ]) ?>
+        <?= Html::a(
+            Yii::t('app', 'ui.archive'),
+            [
+                'archive',
+                'id' => $model->id,
+            ],
+            [
+                'class' => 'btn btn-warning',
+                'data' => ['confirm' => Yii::t('app', 'ui.confirm_archive'), 'method' => 'post'],
+            ],
+        ) ?>
     </p>
 </div>

@@ -1,0 +1,1 @@
+<?php use yii\helpers\Html; use app\models\User; use yii\widgets\ActiveForm; use app\helpers\DateHelper; use yii\helpers\Url; use common\components\AuthManager; /** @var yii\web\View $this */ /** @var User $model */ ?><div class="page"><h1><?= Html::encode($this->title) ?></h1></div>

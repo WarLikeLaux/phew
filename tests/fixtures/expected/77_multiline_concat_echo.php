@@ -1,0 +1,15 @@
+<?= '<div class="card">'
+    . '<div class="card-header">'
+    . Html::encode($model->title)
+    . '</div>'
+    . '<div class="card-body">'
+    . '<p class="card-text">'
+    . Html::encode($model->description)
+    . '</p>'
+    . '<a href="'
+    . Url::to(['view', 'id' => $model->id])
+    . '" class="btn btn-primary">'
+    . Yii::t('app', 'ui.view')
+    . '</a>'
+    . '</div>'
+    . '</div>' ?>
