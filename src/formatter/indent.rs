@@ -452,7 +452,7 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
     let mut pending_docblocks: Vec<String> = Vec::new();
     let mut pending_descriptions: Vec<String> = Vec::new();
     let mut deferred_lines: Vec<String> = Vec::new();
-    let mut pending_count_at_defer: usize = 0;
+
     let mut in_docblock = false;
     let mut docblock_bodies: Vec<String> = Vec::new();
 
@@ -541,8 +541,7 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
         let has_pending = !pending_docblocks.is_empty() || !pending_descriptions.is_empty();
         if has_pending && extract_docblock_body(trimmed).is_none() && trimmed != "/**" && !is_use_import && !is_declare
         {
-            let pending_grew = (pending_docblocks.len() + pending_descriptions.len()) > pending_count_at_defer;
-            if pending_grew && !deferred_lines.is_empty() {
+            if !deferred_lines.is_empty() {
                 for dl in &deferred_lines {
                     emit_reindented_line(dl, pad, &mut depth, &mut result);
                 }
@@ -559,19 +558,7 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
             pending_descriptions.clear();
             prev_was_doc_close = true;
             prev_blank = false;
-            if !pending_grew && !deferred_lines.is_empty() {
-                result.push('\n');
-                for dl in &deferred_lines {
-                    emit_reindented_line(dl, pad, &mut depth, &mut result);
-                }
-                deferred_lines.clear();
-                prev_was_doc_close = false;
-                prev_was_use = true;
-            }
         } else if has_pending && (is_use_import || is_declare) {
-            if deferred_lines.is_empty() {
-                pending_count_at_defer = pending_docblocks.len() + pending_descriptions.len();
-            }
             deferred_lines.push(trimmed.to_string());
             prev_was_use = is_use_import;
             prev_was_declare = is_declare;
@@ -612,13 +599,11 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
     }
 
     if !pending_docblocks.is_empty() || !pending_descriptions.is_empty() {
-        let pending_grew = (pending_docblocks.len() + pending_descriptions.len()) > pending_count_at_defer;
-        if pending_grew && !deferred_lines.is_empty() {
+        if !deferred_lines.is_empty() {
             for dl in &deferred_lines {
                 emit_reindented_line(dl, pad, &mut depth, &mut result);
             }
             result.push('\n');
-            deferred_lines.clear();
         }
         flush_docblocks(
             &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
@@ -626,11 +611,9 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
             &mut depth,
             &mut result,
         );
-        if !deferred_lines.is_empty() {
-            result.push('\n');
-            for dl in &deferred_lines {
-                emit_reindented_line(dl, pad, &mut depth, &mut result);
-            }
+    } else if !deferred_lines.is_empty() {
+        for dl in &deferred_lines {
+            emit_reindented_line(dl, pad, &mut depth, &mut result);
         }
     }
 
