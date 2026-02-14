@@ -12,19 +12,32 @@
                 <div class="d-flex gap-2">
                     <?= Html::a(
                         Yii::t('app', 'ui.view'),
-                        ['view', 'id' => $item->id],
+                        [
+                            'view',
+                            'id' => $item->id,
+                        ],
                         ['class' => 'btn btn-sm btn-outline-primary'],
                     ) ?>
                     <?= Html::a(
                         Yii::t('app', 'ui.edit'),
-                        ['update', 'id' => $item->id],
+                        [
+                            'update',
+                            'id' => $item->id,
+                        ],
                         ['class' => 'btn btn-sm btn-outline-secondary'],
                     ) ?>
                     <?php if ($item->canDelete()): ?>
-                        <?= Html::a(Yii::t('app', 'ui.delete'), ['delete', 'id' => $item->id], [
-                            'class' => 'btn btn-sm btn-outline-danger',
-                            'data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post'],
-                        ]) ?>
+                        <?= Html::a(
+                            Yii::t('app', 'ui.delete'),
+                            [
+                                'delete',
+                                'id' => $item->id,
+                            ],
+                            [
+                                'class' => 'btn btn-sm btn-outline-danger',
+                                'data' => ['confirm' => Yii::t('app', 'ui.confirm_delete'), 'method' => 'post'],
+                            ],
+                        ) ?>
                     <?php endif; ?>
                 </div>
             </div>

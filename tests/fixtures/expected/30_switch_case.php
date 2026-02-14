@@ -6,7 +6,10 @@
                 <p><?= Yii::t('app', 'ui.step_intro_text') ?></p>
                 <?= Html::a(
                     Yii::t('app', 'ui.start'),
-                    ['wizard/step', 'step' => 'details'],
+                    [
+                        'wizard/step',
+                        'step' => 'details',
+                    ],
                     ['class' => 'btn btn-primary btn-lg'],
                 ) ?>
             </div>
@@ -21,10 +24,13 @@
             <div class="step step-confirm">
                 <h2><?= Yii::t('app', 'ui.step_confirm') ?></h2>
                 <?= $this->render('_wizard_summary', ['model' => $viewModel->summary]) ?>
-                <?= Html::submitButton(Yii::t('app', 'ui.confirm'), [
-                    'class' => 'btn btn-success',
-                    'data-confirm' => Yii::t('app', 'ui.confirm_submit'),
-                ]) ?>
+                <?= Html::submitButton(
+                    Yii::t('app', 'ui.confirm'),
+                    [
+                        'class' => 'btn btn-success',
+                        'data-confirm' => Yii::t('app', 'ui.confirm_submit'),
+                    ],
+                ) ?>
             </div>
             <?php break; ?>
         <?php default: ?>
