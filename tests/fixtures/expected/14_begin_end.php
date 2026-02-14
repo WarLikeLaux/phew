@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use yii\helpers\Html;
+
 /**
  * @var yii\web\View $this
  * @var string $header
@@ -9,8 +11,6 @@ declare(strict_types=1);
  * @var array<string> $lines
  * @var array<string, mixed> $options
  */
-
-use yii\helpers\Html;
 
 ?>
 <?= Html::beginTag('div', $options) ?>
