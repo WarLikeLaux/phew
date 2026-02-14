@@ -10,8 +10,8 @@
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-66_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-64_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.5.8-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Fixtures](https://img.shields.io/badge/Fixtures-65_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.5.9-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -176,7 +176,7 @@ src/
 | `formatter::php` | 16 |
 | stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 5 |
 
-**64 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**65 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -244,6 +244,7 @@ src/
 | 62 | `full_header_block` | Полный header-блок (declare, namespace, use, docblock) |
 | 63 | `mixed_echo_block_inline` | Смешанные echo-блоки и inline PHP |
 | 64 | `docblock_merge` | Слияние нескольких docblock в один |
+| 65 | `use_sorting` | Сортировка use statements по алфавиту |
 
 ```bash
 # Unit-тесты
@@ -276,7 +277,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.2** | Обработка PHP-блоков, line splitting, fixtures | ✅ |
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
-| **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 64 fixtures, 66 tests | ✅ |
+| **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 65 fixtures, 66 tests | ✅ |
 | **0.6** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 
