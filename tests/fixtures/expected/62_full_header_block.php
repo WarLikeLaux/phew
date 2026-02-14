@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use app\models\User;
+
 use yii\helpers\Html;
 use yii\widgets\ActiveForm;
 
