@@ -51,6 +51,8 @@ View-файлы в Yii 2 - это `.php`, внутри которых HTML, PHP-
 - ✅ Рекурсивный обход директорий (`.php` и `.html`)
 - ✅ Trailing comma в многострочных вызовах
 - ✅ Пустая строка после `use`-блока и перед закрывающим `?>`
+- ✅ PSR-12 порядок: `declare` → `use` → docblock
+- ✅ Алфавитная сортировка `use` statements
 - ✅ POSIX EOF: файл заканчивается ровно одним `\n`, без лишней пустой строки
 - ✅ Header-блоки PHP (declare, namespace, use) с правильным форматированием
 - ✅ CLI: `--write`, `--tokens`, `--tree`, поддержка файлов и директорий
@@ -274,7 +276,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.2** | Обработка PHP-блоков, line splitting, fixtures | ✅ |
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
-| **0.5** | Docblock merge, decompose engine.rs → 5 modules, 64 fixtures, 66 tests | ✅ |
+| **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 64 fixtures, 66 tests | ✅ |
 | **0.6** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 
