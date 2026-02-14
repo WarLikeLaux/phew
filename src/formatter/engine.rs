@@ -113,9 +113,25 @@ fn split_header_and_opener(code: &str) -> Option<(String, String)> {
     if !is_opener {
         return None;
     }
+    let opener = last.to_string();
+    let orig_lines: Vec<&str> = code.lines().collect();
+    if orig_lines.len() > 1 {
+        let mut end = orig_lines.len().saturating_sub(1);
+        while end > 0 && orig_lines[end].trim().is_empty() {
+            end -= 1;
+        }
+        let mut start = 0;
+        while start < end && orig_lines[start].trim().is_empty() {
+            start += 1;
+        }
+        if start < end {
+            let header = orig_lines[start..end].join("\n");
+            return Some((header, opener));
+        }
+    }
     let header_lines: Vec<&str> = lines[..lines.len() - 1].to_vec();
     let header = header_lines.join("\n");
-    Some((header, last.to_string()))
+    Some((header, opener))
 }
 
 fn is_void_element(name: &str) -> bool {
@@ -193,6 +209,55 @@ fn expand_single_line_docblock(code: &str) -> Option<String> {
         Some("/**\n */".to_string())
     } else {
         Some(format!("/**\n * {body}\n */"))
+    }
+}
+
+fn extract_docblock_body(code: &str) -> Option<String> {
+    let trimmed = code.trim();
+    if trimmed.contains('\n') || !trimmed.starts_with("/**") || !trimmed.ends_with("*/") {
+        return None;
+    }
+    let mut body = trimmed.strip_prefix("/**").and_then(|s| s.strip_suffix("*/"))?.trim();
+    if let Some(rest) = body.strip_prefix('*') {
+        body = rest.trim_start();
+    }
+    if body.is_empty() {
+        return None;
+    }
+    Some(body.to_string())
+}
+
+fn merge_docblock_bodies(bodies: &[String]) -> String {
+    let mut result = String::from("/**");
+    for body in bodies {
+        if body.is_empty() {
+            result.push_str("\n *");
+        } else {
+            result.push_str(&format!("\n * {body}"));
+        }
+    }
+    result.push_str("\n */");
+    result
+}
+
+fn merge_descriptions_and_vars(descriptions: &[String], vars: &[String]) -> Vec<String> {
+    let mut all_bodies: Vec<String> = Vec::new();
+    all_bodies.extend_from_slice(descriptions);
+    if !descriptions.is_empty() && !vars.is_empty() {
+        all_bodies.push(String::new());
+    }
+    all_bodies.extend_from_slice(vars);
+    all_bodies
+}
+
+fn flush_docblocks(bodies: &[String], pad: &str, depth: &mut i32, result: &mut String) {
+    let merged = if bodies.len() == 1 {
+        format!("/**\n * {}\n */", bodies[0])
+    } else {
+        merge_docblock_bodies(bodies)
+    };
+    for doc_line in merged.lines() {
+        emit_reindented_line(doc_line, pad, depth, result);
     }
 }
 
@@ -342,6 +407,7 @@ fn handle_comment_boundaries(chars: &[char], i: usize, ch: char, result: &mut St
         && chars[i + 2] == '@'
         && !result.ends_with('\n')
         && !result.ends_with('/')
+        && !result.ends_with("/**")
     {
         result.pop();
         result.push('\n');
@@ -553,6 +619,12 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
     let is_header = is_header_php_block(&code);
     let mut in_string: Option<char> = None;
     let mut heredoc_marker: Option<String> = None;
+    let mut pending_docblocks: Vec<String> = Vec::new();
+    let mut pending_descriptions: Vec<String> = Vec::new();
+    let mut deferred_lines: Vec<String> = Vec::new();
+    let mut pending_count_at_defer: usize = 0;
+    let mut in_docblock = false;
+    let mut docblock_bodies: Vec<String> = Vec::new();
 
     for line in code.lines() {
         if let Some(ref marker) = heredoc_marker {
@@ -584,9 +656,47 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
             continue;
         }
         let trimmed = line.trim();
+
+        if in_docblock {
+            if trimmed == "*/" {
+                in_docblock = false;
+                let all_var = !docblock_bodies.is_empty() && docblock_bodies.iter().all(|b| b.starts_with("@var "));
+                if all_var {
+                    pending_docblocks.append(&mut docblock_bodies);
+                } else if is_header {
+                    pending_descriptions.append(&mut docblock_bodies);
+                } else {
+                    if !pending_docblocks.is_empty() || !pending_descriptions.is_empty() {
+                        flush_docblocks(
+                            &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
+                            pad,
+                            &mut depth,
+                            &mut result,
+                        );
+                        pending_docblocks.clear();
+                        pending_descriptions.clear();
+                    }
+                    emit_reindented_line("/**", pad, &mut depth, &mut result);
+                    for body in &docblock_bodies {
+                        emit_reindented_line(&format!("* {body}"), pad, &mut depth, &mut result);
+                    }
+                    emit_reindented_line("*/", pad, &mut depth, &mut result);
+                    docblock_bodies.clear();
+                    prev_was_doc_close = true;
+                }
+            } else if let Some(body) = trimmed.strip_prefix("* ") {
+                docblock_bodies.push(body.to_string());
+            } else if trimmed == "*" {
+                docblock_bodies.push(String::new());
+            }
+            continue;
+        }
+
         if trimmed.is_empty() {
             if !prev_blank && !first_content {
-                result.push('\n');
+                if pending_docblocks.is_empty() && !in_docblock {
+                    result.push('\n');
+                }
                 prev_blank = true;
             }
             continue;
@@ -597,6 +707,47 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         first_content = false;
         let is_use_import = trimmed.starts_with("use ");
         let is_declare = trimmed.starts_with("declare(");
+
+        let has_pending = !pending_docblocks.is_empty() || !pending_descriptions.is_empty();
+        if has_pending && extract_docblock_body(trimmed).is_none() && trimmed != "/**" && !is_use_import && !is_declare
+        {
+            let pending_grew = (pending_docblocks.len() + pending_descriptions.len()) > pending_count_at_defer;
+            if pending_grew && !deferred_lines.is_empty() {
+                for dl in &deferred_lines {
+                    emit_reindented_line(dl, pad, &mut depth, &mut result);
+                }
+                result.push('\n');
+                deferred_lines.clear();
+            }
+            flush_docblocks(
+                &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
+                pad,
+                &mut depth,
+                &mut result,
+            );
+            pending_docblocks.clear();
+            pending_descriptions.clear();
+            prev_was_doc_close = true;
+            prev_blank = false;
+            if !pending_grew && !deferred_lines.is_empty() {
+                result.push('\n');
+                for dl in &deferred_lines {
+                    emit_reindented_line(dl, pad, &mut depth, &mut result);
+                }
+                deferred_lines.clear();
+                prev_was_doc_close = false;
+                prev_was_use = true;
+            }
+        } else if has_pending && (is_use_import || is_declare) {
+            if deferred_lines.is_empty() {
+                pending_count_at_defer = pending_docblocks.len() + pending_descriptions.len();
+            }
+            deferred_lines.push(trimmed.to_string());
+            prev_was_use = is_use_import;
+            prev_was_declare = is_declare;
+            continue;
+        }
+
         if (prev_was_use && !is_use_import && !prev_blank) || (prev_was_declare && !is_declare && !prev_blank) {
             result.push('\n');
         }
@@ -608,13 +759,16 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
         prev_was_use = is_use_import;
         prev_was_declare = is_declare;
 
-        if let Some(expanded_doc) = expand_single_line_docblock(trimmed) {
-            for doc_line in expanded_doc.lines() {
-                emit_reindented_line(doc_line, pad, &mut depth, &mut result);
-            }
-            prev_was_doc_close = true;
+        if let Some(body) = extract_docblock_body(trimmed) {
+            pending_docblocks.push(body);
             prev_was_use = false;
             prev_was_declare = false;
+            continue;
+        }
+
+        if trimmed == "/**" {
+            in_docblock = true;
+            docblock_bodies.clear();
             continue;
         }
 
@@ -624,6 +778,29 @@ fn reindent_php_block(code: &str, pad: &str) -> String {
             heredoc_marker = Some(marker);
         } else if has_unclosed_string(trimmed) {
             in_string = detect_open_quote(trimmed);
+        }
+    }
+
+    if !pending_docblocks.is_empty() || !pending_descriptions.is_empty() {
+        let pending_grew = (pending_docblocks.len() + pending_descriptions.len()) > pending_count_at_defer;
+        if pending_grew && !deferred_lines.is_empty() {
+            for dl in &deferred_lines {
+                emit_reindented_line(dl, pad, &mut depth, &mut result);
+            }
+            result.push('\n');
+            deferred_lines.clear();
+        }
+        flush_docblocks(
+            &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
+            pad,
+            &mut depth,
+            &mut result,
+        );
+        if !deferred_lines.is_empty() {
+            result.push('\n');
+            for dl in &deferred_lines {
+                emit_reindented_line(dl, pad, &mut depth, &mut result);
+            }
         }
     }
 
