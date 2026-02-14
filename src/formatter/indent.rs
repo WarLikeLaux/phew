@@ -634,5 +634,32 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
         }
     }
 
-    result.trim_end_matches('\n').to_string() + "\n"
+    let result = result.trim_end_matches('\n').to_string() + "\n";
+    sort_use_lines(&result)
+}
+
+fn sort_use_lines(code: &str) -> String {
+    let lines: Vec<&str> = code.lines().collect();
+    let mut result: Vec<String> = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let trimmed = lines[i].trim();
+        if trimmed.starts_with("use ") && trimmed.ends_with(';') {
+            let mut use_group: Vec<&str> = Vec::new();
+            while i < lines.len() && lines[i].trim().starts_with("use ") && lines[i].trim().ends_with(';') {
+                use_group.push(lines[i]);
+                i += 1;
+            }
+            use_group.sort_by_key(|a| a.trim().to_lowercase());
+            for line in use_group {
+                result.push(line.to_string());
+            }
+        } else {
+            result.push(lines[i].to_string());
+            i += 1;
+        }
+    }
+
+    result.join("\n") + "\n"
 }
