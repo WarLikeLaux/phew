@@ -310,9 +310,15 @@ fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut S
         return;
     }
     let single = format!("{pad}<?php {formatted} ?>");
-    if single.len() <= MAX_LINE_LENGTH {
+    let is_alt_syntax_opener = code.trim().ends_with(':');
+    if single.len() <= MAX_LINE_LENGTH || is_alt_syntax_opener {
         output.push_str(&format!("{single}\n"));
-    } else if let Some((q_pos, c_pos)) = find_ternary_positions(&formatted) {
+        if is_php_block_opener(code) {
+            *depth += 1;
+        }
+        return;
+    }
+    if let Some((q_pos, c_pos)) = find_ternary_positions(&formatted) {
         let condition = formatted[..q_pos].trim_end();
         let true_val = formatted[q_pos + 1..c_pos].trim();
         let false_val = formatted[c_pos + 1..].trim();
