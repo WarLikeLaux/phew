@@ -333,7 +333,7 @@ pub fn matches_keyword_at(chars: &[char], pos: usize, keyword: &str) -> bool {
 }
 
 pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result: &mut String) {
-    let leading = count_leading_closers(formatted) as i32;
+    let leading = (count_leading_closers(formatted) as i32).min(1);
     let is_ternary_cont = formatted.starts_with("? ") || formatted.starts_with(": ");
     let extra = i32::from(is_ternary_cont);
     let write_depth = (*depth - leading + extra).max(0) as usize;
@@ -348,7 +348,7 @@ pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result:
     }
     let (openers, closers) = count_brackets(formatted);
     let net = openers as i32 - closers as i32;
-    *depth += net.min(1);
+    *depth += net.clamp(-1, 1);
     *depth = (*depth).max(0);
 }
 
