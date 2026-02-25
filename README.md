@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-70_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-91_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.6.1-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-49_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-92_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.6.2-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -138,11 +138,11 @@ src/
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
 │   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (573 строки)
-│   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (724 строки)
-│   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (547 строк)
+│   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (727 строк)
+│   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (777 строк)
 │   ├── echo.rs          # Форматирование PHP echo: chain, concat, ternary (127 строк)
-│   ├── docblock.rs      # Работа с docblock: expand, merge, flush, var normalization (212 строк)
-│   ├── php.rs           # PHP: keyword spacing, assignment, fat arrow, splitting (603 строки)
+│   ├── docblock.rs      # Работа с docblock: expand, merge, flush, var normalization (206 строк)
+│   ├── php.rs           # PHP: keyword spacing, assignment, fat arrow, splitting (551 строка)
 │   ├── html.rs          # HTML-правила (заглушка)
 │   └── yii.rs           # Yii 2 паттерны (заглушка)
 └── io/
@@ -165,18 +165,18 @@ src/
 
 ## Тестирование
 
-**70 unit-тестов** по всем модулям:
+**49 unit-тестов** по всем модулям:
 
 | Модуль | Тестов |
 |--------|--------|
 | `parser::lexer` | 21 |
 | `parser::ast` | 6 |
 | `formatter::engine` | 7 |
-| `formatter::docblock` | 15 |
-| `formatter::php` | 16 |
-| stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 5 |
+| `formatter::docblock` | 6 |
+| `formatter::php` | 3 |
+| stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 6 |
 
-**91 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**92 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -271,6 +271,7 @@ src/
 | 89 | `widget_config_spread` | Spread конфига виджета |
 | 90 | `long_block_opener` | Alt-syntax opener длиннее 120 символов на одной строке |
 | 91 | `brace_if_else_render` | Brace-style if/else с render-вызовами и вложенными массивами |
+| 92 | `menu_items_nested_arrays` | Многоуровневые массивы меню с корректным переносом элементов |
 
 ```bash
 # Unit-тесты
@@ -305,6 +306,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
 | **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 65 fixtures, 66 tests | ✅ |
 | **0.6** | Use dedup/grouping, @var normalization, brace/comma breaks, symmetric depth tracking, 91 fixtures, 70 tests | ✅ |
+| **0.6.2** | Nested array assignment splitting, 92 fixtures, simplified unit tests (49 total) | ✅ |
 | **0.7** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 
