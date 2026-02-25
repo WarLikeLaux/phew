@@ -273,6 +273,7 @@ pub fn normalize_statements(code: &str) -> String {
     let mut i = 0;
     let mut paren_depth: i32 = 0;
     let mut brace_depth: i32 = 0;
+    let mut bracket_depth: i32 = 0;
 
     while i < len {
         let ch = chars[i];
@@ -289,6 +290,8 @@ pub fn normalize_statements(code: &str) -> String {
             ')' => paren_depth -= 1,
             '{' => brace_depth += 1,
             '}' => brace_depth -= 1,
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
             _ => {}
         }
         let next = if i + 1 < len { Some(chars[i + 1]) } else { None };
@@ -308,7 +311,7 @@ pub fn normalize_statements(code: &str) -> String {
         if ch == ';' && paren_depth <= 0 && !next_is_nl {
             result.push('\n');
         }
-        if ch == ',' && brace_depth > 0 && paren_depth <= 0 && !next_is_nl {
+        if ch == ',' && brace_depth > 0 && paren_depth <= 0 && bracket_depth <= 0 && !next_is_nl {
             result.push('\n');
         }
         i += 1;

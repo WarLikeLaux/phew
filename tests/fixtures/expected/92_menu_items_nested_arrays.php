@@ -1,0 +1,26 @@
+<?php if ($admin){
+    $menuItems = [
+        [
+            'label' => 'SRM',
+            'linkOptions' => [
+                'data-collapse' => 'srm',
+                'class' => 'menu-list-collapse-toggle srm',
+            ],
+            'items' => [
+                [
+                    'label' => 'Orders from 1C',
+                    'url' => ['/order-from-1-c/index'],
+                ],
+                [
+                    'label' => 'Contractors',
+                    'url' => ['/contractor/index'],
+                ],
+                [
+                    'label' => 'Contractor types',
+                    'url' => ['/contractor-type/index'],
+                ],
+            ],
+            'iconClass' => 'bi bi-briefcase',
+        ],
+    ];
+} ?>

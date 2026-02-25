@@ -123,21 +123,26 @@ pub fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
         return Some(build_split(&prefix, &args, &suffix, base_pad));
     }
 
+    if let Some(expanded) = expand_assignment_array(formatted, base_pad) {
+        return Some(expanded);
+    }
+
     let chars: Vec<char> = formatted.chars().collect();
-    let open_pos = chars.iter().position(|&c| c == '(')?;
-    let close_pos = find_matching_close(&chars, open_pos)?;
+    if let Some(open_pos) = chars.iter().position(|&c| c == '(')
+        && let Some(close_pos) = find_matching_close(&chars, open_pos)
+    {
+        let inner: String = chars[open_pos + 1..close_pos].iter().collect();
+        let inner = inner.trim();
 
-    let inner: String = chars[open_pos + 1..close_pos].iter().collect();
-    let inner = inner.trim();
-
-    if let Some(array_inner) = inner.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
-        let items = split_by_commas(array_inner);
-        if items.len() > 1 {
-            let prefix: String = chars[..=open_pos].iter().collect();
-            let suffix: String = chars[close_pos..].iter().collect();
-            let new_prefix = format!("{prefix}[");
-            let new_suffix = format!("]{suffix}");
-            return Some(build_split(&new_prefix, &items, &new_suffix, base_pad));
+        if let Some(array_inner) = inner.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+            let items = split_by_commas(array_inner);
+            if items.len() > 1 {
+                let prefix: String = chars[..=open_pos].iter().collect();
+                let suffix: String = chars[close_pos..].iter().collect();
+                let new_prefix = format!("{prefix}[");
+                let new_suffix = format!("]{suffix}");
+                return Some(build_split(&new_prefix, &items, &new_suffix, base_pad));
+            }
         }
     }
 
@@ -146,6 +151,231 @@ pub fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
     }
 
     None
+}
+
+fn find_top_level_fat_arrow(code: &str) -> Option<usize> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut depth = 0i32;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+        } else if ch == '=' && i + 1 < len && chars[i + 1] == '>' && depth == 0 {
+            return Some(i);
+        }
+
+        i += 1;
+    }
+
+    None
+}
+
+fn prev_non_ws(chars: &[char], pos: usize) -> Option<char> {
+    if pos == 0 {
+        return None;
+    }
+    let mut i = pos;
+    while i > 0 {
+        i -= 1;
+        if !chars[i].is_whitespace() {
+            return Some(chars[i]);
+        }
+    }
+    None
+}
+
+fn next_non_ws(chars: &[char], pos: usize) -> Option<char> {
+    let mut i = pos + 1;
+    while i < chars.len() {
+        if !chars[i].is_whitespace() {
+            return Some(chars[i]);
+        }
+        i += 1;
+    }
+    None
+}
+
+fn find_top_level_assignment_equal(code: &str) -> Option<usize> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut depth = 0i32;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+            i += 1;
+            continue;
+        }
+        if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+            i += 1;
+            continue;
+        }
+
+        if ch == '=' && depth == 0 {
+            let prev = prev_non_ws(&chars, i);
+            let next = next_non_ws(&chars, i);
+            let is_non_assignment = next.is_some_and(|c| c == '=' || c == '>')
+                || prev.is_some_and(|c| {
+                    matches!(
+                        c,
+                        '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '.' | '&' | '|' | '^' | '?'
+                    )
+                });
+            if !is_non_assignment {
+                return Some(i);
+            }
+        }
+
+        i += 1;
+    }
+
+    None
+}
+
+fn format_assignment_array_item(item: &str, pad: &str) -> String {
+    let item = item.trim();
+    if item.is_empty() {
+        return String::new();
+    }
+
+    if item.starts_with('[') && item.ends_with(']') {
+        if let Some(expanded) = expand_assignment_array_literal(item, pad, true) {
+            return expanded;
+        }
+        return format!("{pad}{item},\n");
+    }
+
+    if let Some(arrow_pos) = find_top_level_fat_arrow(item) {
+        let key = item[..arrow_pos + 2].trim_end();
+        let value = item[arrow_pos + 2..].trim_start();
+        if value.starts_with('[') && value.ends_with(']') {
+            let inner = &value[1..value.len() - 1];
+            let sub_items = split_by_commas(inner);
+            if sub_items.len() > 1 {
+                let nested_pad = format!("{pad}{INDENT}");
+                let mut result = format!("{pad}{key} [\n");
+                for sub in &sub_items {
+                    result.push_str(&format_assignment_array_item(sub, &nested_pad));
+                }
+                result.push_str(&format!("{pad}],\n"));
+                return result;
+            }
+        }
+    }
+
+    if pad.len() + item.len() + 1 > MAX_LINE_LENGTH {
+        if let Some(split) = try_split_long_line(item, pad) {
+            let trimmed = split.trim_end_matches('\n');
+            return format!("{trimmed},\n");
+        }
+    }
+
+    format!("{pad}{item},\n")
+}
+
+fn expand_assignment_array_literal(array: &str, pad: &str, trailing_comma: bool) -> Option<String> {
+    let trimmed = array.trim();
+    if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
+        return None;
+    }
+
+    let inner = &trimmed[1..trimmed.len() - 1];
+    let items = split_by_commas(inner);
+    if items.is_empty() {
+        return None;
+    }
+
+    let first = items[0].trim();
+    let should_expand =
+        items.len() > 1 || first.starts_with('[') || pad.len() + INDENT.len() + first.len() + 1 > MAX_LINE_LENGTH;
+    if !should_expand {
+        return None;
+    }
+
+    let nested_pad = format!("{pad}{INDENT}");
+    let mut result = format!("{pad}[\n");
+    for item in &items {
+        result.push_str(&format_assignment_array_item(item, &nested_pad));
+    }
+
+    if trailing_comma {
+        result.push_str(&format!("{pad}],\n"));
+    } else {
+        result.push_str(&format!("{pad}]\n"));
+    }
+
+    Some(result)
+}
+
+fn expand_assignment_array(formatted: &str, base_pad: &str) -> Option<String> {
+    let eq_pos = find_top_level_assignment_equal(formatted)?;
+    let lhs = formatted[..=eq_pos].trim_end();
+    let rhs = formatted[eq_pos + 1..].trim_start();
+
+    let rhs_trimmed = rhs.trim();
+    let (array_part, suffix) = if let Some(no_semicolon) = rhs_trimmed.strip_suffix(';') {
+        (no_semicolon.trim_end(), ";")
+    } else {
+        (rhs_trimmed, "")
+    };
+
+    if !array_part.starts_with('[') || !array_part.ends_with(']') {
+        return None;
+    }
+
+    let inner = &array_part[1..array_part.len() - 1];
+    let items = split_by_commas(inner);
+    if items.is_empty() {
+        return None;
+    }
+
+    let first = items[0].trim();
+    let should_expand = items.len() > 1
+        || first.starts_with('[')
+        || base_pad.len() + lhs.len() + 2 + array_part.len() > MAX_LINE_LENGTH;
+    if !should_expand {
+        return None;
+    }
+
+    let nested_pad = format!("{base_pad}{INDENT}");
+    let mut result = format!("{base_pad}{lhs} [\n");
+    for item in &items {
+        result.push_str(&format_assignment_array_item(item, &nested_pad));
+    }
+    result.push_str(&format!("{base_pad}]{suffix}\n"));
+    Some(result)
 }
 
 pub fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String {

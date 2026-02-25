@@ -502,74 +502,41 @@ mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
-    #[test]
-    fn keyword_space() {
-        assert_eq!(format_php_code("if($x):"), "if ($x):");
+    fn assert_format_cases(cases: &[(&str, &str)]) {
+        for (input, expected) in cases {
+            assert_eq!(format_php_code(input), *expected, "input: {input}");
+        }
     }
 
     #[test]
-    fn keyword_already_spaced() {
-        assert_eq!(format_php_code("if ($x):"), "if ($x):");
-    }
-
-    #[test]
-    fn foreach_keyword() {
-        assert_eq!(
-            format_php_code("foreach($items as $item):"),
-            "foreach ($items as $item):"
-        );
-    }
-
-    #[test]
-    fn arrow_spacing() {
-        assert_eq!(format_php_code("'id'=>$item->id"), "'id' => $item->id");
-    }
-
-    #[test]
-    fn arrow_already_spaced() {
-        assert_eq!(format_php_code("'id' => $item->id"), "'id' => $item->id");
-    }
-
-    #[test]
-    fn comma_spacing() {
-        assert_eq!(format_php_code("$a,$b,$c"), "$a, $b, $c");
-    }
-
-    #[test]
-    fn comma_already_spaced() {
-        assert_eq!(format_php_code("$a, $b, $c"), "$a, $b, $c");
-    }
-
-    #[test]
-    fn object_arrow_untouched() {
-        assert_eq!(format_php_code("$model->title"), "$model->title");
-    }
-
-    #[test]
-    fn string_content_untouched() {
-        assert_eq!(
-            format_php_code("Html::a('foo=>bar','baz')"),
-            "Html::a('foo=>bar', 'baz')"
-        );
+    fn spacing_and_unchanged_cases() {
+        assert_format_cases(&[
+            ("if($x):", "if ($x):"),
+            ("if ($x):", "if ($x):"),
+            ("foreach($items as $item):", "foreach ($items as $item):"),
+            ("'id'=>$item->id", "'id' => $item->id"),
+            ("'id' => $item->id", "'id' => $item->id"),
+            ("$a,$b,$c", "$a, $b, $c"),
+            ("$a, $b, $c", "$a, $b, $c"),
+            ("$model->title", "$model->title"),
+            ("Html::a('foo=>bar','baz')", "Html::a('foo=>bar', 'baz')"),
+            ("endif;", "endif;"),
+            ("Html::encode($model->title)", "Html::encode($model->title)"),
+            ("$name='World';", "$name = 'World';"),
+            ("declare(strict_types=1);", "declare(strict_types=1);"),
+            ("$a==$b", "$a==$b"),
+            ("$a!=$b", "$a!=$b"),
+            ("$a>=$b", "$a>=$b"),
+            ("$a<=$b", "$a<=$b"),
+            ("$a??=$b", "$a??=$b"),
+        ]);
     }
 
     #[test]
     fn complex_yii_call() {
-        let input = "Html::a($item->name,['item/view','id'=>$item->id],['class'=>'btn btn-primary'])";
-        let expected = "Html::a($item->name, ['item/view', 'id' => $item->id], ['class' => 'btn btn-primary'])";
-        assert_eq!(format_php_code(input), expected);
-    }
-
-    #[test]
-    fn endif_unchanged() {
-        assert_eq!(format_php_code("endif;"), "endif;");
-    }
-
-    #[test]
-    fn echo_expression() {
         assert_eq!(
-            format_php_code("Html::encode($model->title)"),
-            "Html::encode($model->title)"
+            format_php_code("Html::a($item->name,['item/view','id'=>$item->id],['class'=>'btn btn-primary'])"),
+            "Html::a($item->name, ['item/view', 'id' => $item->id], ['class' => 'btn btn-primary'])"
         );
     }
 
@@ -580,24 +547,5 @@ mod tests {
             split_by_concat(code),
             vec!["'a'".to_string(), "$b".to_string(), "'c'".to_string()]
         );
-    }
-
-    #[test]
-    fn assignment_spacing() {
-        assert_eq!(format_php_code("$name='World';"), "$name = 'World';");
-    }
-
-    #[test]
-    fn assignment_keeps_comparisons() {
-        assert_eq!(format_php_code("$a==$b"), "$a==$b");
-        assert_eq!(format_php_code("$a!=$b"), "$a!=$b");
-        assert_eq!(format_php_code("$a>=$b"), "$a>=$b");
-        assert_eq!(format_php_code("$a<=$b"), "$a<=$b");
-        assert_eq!(format_php_code("$a??=$b"), "$a??=$b");
-    }
-
-    #[test]
-    fn declare_equal_unchanged() {
-        assert_eq!(format_php_code("declare(strict_types=1);"), "declare(strict_types=1);");
     }
 }
