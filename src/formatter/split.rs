@@ -108,6 +108,10 @@ pub fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
         return None;
     }
 
+    if let Some(split) = split_long_by_commas(formatted, base_pad) {
+        return Some(split);
+    }
+
     if let Some((q_pos, c_pos)) = find_ternary_positions(formatted) {
         let condition = formatted[..q_pos].trim_end();
         let true_val = formatted[q_pos + 1..c_pos].trim();
@@ -124,6 +128,10 @@ pub fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
     }
 
     if let Some(expanded) = expand_assignment_array(formatted, base_pad) {
+        return Some(expanded);
+    }
+
+    if let Some(expanded) = expand_bare_array_with_suffix(formatted, base_pad) {
         return Some(expanded);
     }
 
@@ -380,7 +388,26 @@ fn expand_assignment_array(formatted: &str, base_pad: &str) -> Option<String> {
 
 pub fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> String {
     let inner_pad = format!("{pad}{INDENT}");
-    let mut result = format!("{pad}{prefix}\n");
+    let mut result = String::new();
+    let prefix_trimmed = prefix.trim();
+
+    if pad.len() + prefix_trimmed.len() > MAX_LINE_LENGTH {
+        let mut prefix_parts = split_by_commas(prefix_trimmed);
+        if prefix_parts.len() > 1 {
+            let last = prefix_parts.pop().unwrap_or_default();
+            for part in prefix_parts {
+                let mut line = part.trim().to_string();
+                line.push(',');
+                result.push_str(&format!("{pad}{line}\n"));
+            }
+            result.push_str(&format!("{pad}{}\n", last.trim()));
+        } else {
+            result.push_str(&format!("{pad}{prefix_trimmed}\n"));
+        }
+    } else {
+        result.push_str(&format!("{pad}{prefix_trimmed}\n"));
+    }
+
     for arg in args {
         let line_len = inner_pad.len() + arg.len() + 1;
         if line_len > MAX_LINE_LENGTH {
@@ -409,8 +436,185 @@ pub fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> St
         }
         result.push_str(&format!("{inner_pad}{arg},\n"));
     }
-    result.push_str(&format!("{pad}{suffix}\n"));
+    let suffix_trimmed = suffix.trim();
+    let initial_depth = bracket_balance(prefix_trimmed);
+    let split_depth = initial_depth - count_leading_closers(suffix_trimmed) as i32;
+    if let Some(split) = split_long_by_commas_from_depth(suffix_trimmed, pad, initial_depth, split_depth) {
+        result.push_str(&split);
+        return result;
+    }
+    if pad.len() + suffix_trimmed.len() > MAX_LINE_LENGTH {
+        if let Some(split) = try_split_long_line(suffix_trimmed, pad) {
+            result.push_str(&split);
+            return result;
+        }
+    }
+    result.push_str(&format!("{pad}{suffix_trimmed}\n"));
     result
+}
+
+fn split_long_by_commas(formatted: &str, pad: &str) -> Option<String> {
+    split_long_by_commas_from_depth(formatted, pad, 0, 0)
+}
+
+fn split_long_by_commas_from_depth(formatted: &str, pad: &str, start_depth: i32, split_depth: i32) -> Option<String> {
+    let parts = split_by_commas_with_depth(formatted, start_depth, split_depth);
+    if parts.len() <= 1 {
+        return None;
+    }
+
+    let mut result = String::new();
+    for (idx, part) in parts.iter().enumerate() {
+        let mut line = part.trim().to_string();
+        if idx < parts.len() - 1 {
+            line.push(',');
+        }
+
+        if pad.len() + line.len() > MAX_LINE_LENGTH {
+            if let Some(expanded) = expand_bare_array_with_suffix(&line, pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(expanded) = expand_nested_array(&line, pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(expanded) = expand_bare_array(&line, pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(expanded) = expand_inline_closure(&line, pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(split) = try_split_long_line(&line, pad) {
+                result.push_str(&split);
+                continue;
+            }
+        }
+
+        result.push_str(&format!("{pad}{line}\n"));
+    }
+
+    Some(result)
+}
+
+fn expand_bare_array_with_suffix(line: &str, pad: &str) -> Option<String> {
+    let trimmed = line.trim();
+    let (array_part, suffix) = if let Some(s) = trimmed.strip_suffix(',') {
+        (s.trim_end(), ",")
+    } else if let Some(s) = trimmed.strip_suffix(';') {
+        (s.trim_end(), ";")
+    } else {
+        (trimmed, "")
+    };
+
+    let mut expanded = expand_bare_array(array_part, pad)?;
+
+    match suffix {
+        "," => Some(expanded),
+        ";" => {
+            if expanded.ends_with(",\n") {
+                expanded.truncate(expanded.len() - 2);
+                expanded.push_str(";\n");
+            }
+            Some(expanded)
+        }
+        "" => {
+            if expanded.ends_with(",\n") {
+                expanded.truncate(expanded.len() - 2);
+                expanded.push('\n');
+            }
+            Some(expanded)
+        }
+        _ => None,
+    }
+}
+
+fn split_by_commas_with_depth(code: &str, mut depth: i32, split_depth: i32) -> Vec<String> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut items = Vec::new();
+    let mut current = String::new();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            current.push(ch);
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+                if i < len {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+            }
+            if i < len {
+                current.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+        } else if ch == ',' && depth == split_depth {
+            items.push(current.trim().to_string());
+            current = String::new();
+            i += 1;
+            continue;
+        }
+
+        current.push(ch);
+        i += 1;
+    }
+
+    if !current.trim().is_empty() {
+        items.push(current.trim().to_string());
+    }
+
+    items
+}
+
+fn bracket_balance(code: &str) -> i32 {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut depth = 0i32;
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+        }
+        i += 1;
+    }
+
+    depth
+}
+
+fn count_leading_closers(code: &str) -> usize {
+    code.chars().take_while(|c| matches!(c, ')' | ']' | '}')).count()
 }
 
 pub fn expand_bare_array(arg: &str, pad: &str) -> Option<String> {
