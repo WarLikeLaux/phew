@@ -1,7 +1,6 @@
 <?php
 
 use app\models\User;
-
 use yii\helpers\Html;
 use yii\widgets\ActiveForm;
 

@@ -1,7 +1,6 @@
 <?php
 
 use app\models\User;
-
 use yii\helpers\Html;
 
 declare(strict_types=1);

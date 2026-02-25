@@ -683,12 +683,6 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
     sort_use_lines(&result)
 }
 
-fn use_namespace_prefix(line: &str) -> String {
-    let trimmed = line.trim();
-    let path = trimmed.strip_prefix("use ").unwrap_or(trimmed).trim_start_matches('\\');
-    path.split('\\').next().unwrap_or("").to_lowercase()
-}
-
 fn sort_use_lines(code: &str) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let mut result: Vec<String> = Vec::new();
@@ -705,13 +699,7 @@ fn sort_use_lines(code: &str) -> String {
             use_group.sort_by_key(|a| a.trim().to_lowercase());
             use_group.dedup_by(|a, b| a.trim() == b.trim());
 
-            let mut prev_prefix = String::new();
             for line in use_group {
-                let prefix = use_namespace_prefix(line);
-                if !prev_prefix.is_empty() && prefix != prev_prefix {
-                    result.push(String::new());
-                }
-                prev_prefix = prefix;
                 result.push(line.to_string());
             }
             if i < lines.len() && !lines[i].trim().is_empty() {

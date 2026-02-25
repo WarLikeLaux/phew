@@ -11,7 +11,7 @@
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-49_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
 [![Fixtures](https://img.shields.io/badge/Fixtures-92_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.6.2-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-0.6.3-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -246,7 +246,7 @@ src/
 | 64 | `docblock_merge` | Слияние нескольких docblock в один |
 | 65 | `use_sorting` | Сортировка use statements по алфавиту |
 | 66 | `use_dedup` | Удаление дублей use statements |
-| 67 | `use_grouping` | Группировка use по namespace |
+| 67 | `use_grouping` | Сортировка use без разделения на группы |
 | 68 | `header_reorder` | Перестановка declare → use → docblock |
 | 69 | `docblock_var_types` | Нормализация @var $name Type → @var Type $name |
 | 70 | `trailing_comma_enforce` | Trailing comma в аргументах вызовов |
@@ -305,8 +305,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
 | **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 65 fixtures, 66 tests | ✅ |
-| **0.6** | Use dedup/grouping, @var normalization, brace/comma breaks, symmetric depth tracking, 91 fixtures, 70 tests | ✅ |
-| **0.6.2** | Nested array assignment splitting, 92 fixtures, simplified unit tests (49 total) | ✅ |
+| **0.6** | Use dedup/sorting, @var normalization, brace/comma breaks, symmetric depth tracking, nested array assignment splitting, 92 fixtures, 49 tests | ✅ |
 | **0.7** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 

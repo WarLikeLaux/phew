@@ -1,7 +1,6 @@
 <?php
 
 use backend\widgets\StatusCircleWidget;
-
 use yii\grid\GridView;
 use yii\helpers\Html;
 

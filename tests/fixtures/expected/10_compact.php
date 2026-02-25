@@ -2,7 +2,6 @@
 
 use app\helpers\Html;
 use app\models\User;
-
 use yii\widgets\ActiveForm;
 
 /**
