@@ -273,6 +273,7 @@ pub fn normalize_statements(code: &str) -> String {
     let mut i = 0;
     let mut paren_depth: i32 = 0;
     let mut brace_depth: i32 = 0;
+    let mut bracket_depth: i32 = 0;
 
     while i < len {
         let ch = chars[i];
@@ -289,6 +290,8 @@ pub fn normalize_statements(code: &str) -> String {
             ')' => paren_depth -= 1,
             '{' => brace_depth += 1,
             '}' => brace_depth -= 1,
+            '[' => bracket_depth += 1,
+            ']' => bracket_depth -= 1,
             _ => {}
         }
         let next = if i + 1 < len { Some(chars[i + 1]) } else { None };
@@ -308,7 +311,7 @@ pub fn normalize_statements(code: &str) -> String {
         if ch == ';' && paren_depth <= 0 && !next_is_nl {
             result.push('\n');
         }
-        if ch == ',' && brace_depth > 0 && paren_depth <= 0 && !next_is_nl {
+        if ch == ',' && brace_depth > 0 && paren_depth <= 0 && bracket_depth <= 0 && !next_is_nl {
             result.push('\n');
         }
         i += 1;
@@ -339,7 +342,12 @@ pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result:
     let write_depth = (*depth - leading + extra).max(0) as usize;
     let inner_pad = INDENT.repeat(write_depth);
     let base_pad = format!("{pad}{inner_pad}");
-    if let Some(split) = try_split_long_line(formatted, &base_pad) {
+    if let Some((head, tail)) = split_trailing_array_item_close(formatted) {
+        result.push_str(&format!("{base_pad}{head}\n"));
+        let close_depth = write_depth.saturating_sub(1);
+        let close_pad = format!("{pad}{}", INDENT.repeat(close_depth));
+        result.push_str(&format!("{close_pad}{tail}\n"));
+    } else if let Some(split) = try_split_long_line(formatted, &base_pad) {
         result.push_str(&split);
     } else if formatted.starts_with('*') {
         result.push_str(&format!("{pad}{inner_pad} {formatted}\n"));
@@ -350,6 +358,42 @@ pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result:
     let net = openers as i32 - closers as i32;
     *depth += net.clamp(-1, 1);
     *depth = (*depth).max(0);
+}
+
+fn split_trailing_array_item_close(line: &str) -> Option<(String, String)> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let (core, suffix) = if let Some(no_comma) = trimmed.strip_suffix(',') {
+        (no_comma.trim_end(), ",")
+    } else if let Some(no_semicolon) = trimmed.strip_suffix(';') {
+        (no_semicolon.trim_end(), ";")
+    } else {
+        return None;
+    };
+
+    if !core.ends_with(']') {
+        return None;
+    }
+
+    let (openers, closers) = count_brackets(core);
+    if closers != openers + 1 {
+        return None;
+    }
+
+    let head = core.strip_suffix(']')?.trim_end();
+    if head.is_empty() {
+        return None;
+    }
+
+    let mut first_line = head.to_string();
+    if !first_line.ends_with(',') {
+        first_line.push(',');
+    }
+
+    Some((first_line, format!("]{suffix}")))
 }
 
 pub fn join_ternary_lines(code: &str) -> String {
@@ -371,6 +415,8 @@ pub fn join_ternary_lines(code: &str) -> String {
         }
 
         let mut joined = trimmed.to_string();
+        let mut saw_false_branch = false;
+        let mut false_branch_depth: i32 = 0;
         i += 1;
         while i < lines.len() {
             let next = lines[i].trim();
@@ -379,6 +425,25 @@ pub fn join_ternary_lines(code: &str) -> String {
             }
             joined.push(' ');
             joined.push_str(next);
+
+            if let Some(false_part) = next.strip_prefix(':').map(str::trim_start) {
+                saw_false_branch = true;
+                false_branch_depth = 0;
+                let (o, c) = count_brackets(false_part);
+                false_branch_depth += o as i32 - c as i32;
+                if false_branch_depth <= 0 && (false_part.ends_with(',') || false_part.ends_with(';')) {
+                    i += 1;
+                    break;
+                }
+            } else if saw_false_branch {
+                let (o, c) = count_brackets(next);
+                false_branch_depth += o as i32 - c as i32;
+                if false_branch_depth <= 0 && (next.ends_with(',') || next.ends_with(';')) {
+                    i += 1;
+                    break;
+                }
+            }
+
             i += 1;
             if next.contains(';') {
                 break;
@@ -680,12 +745,6 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
     sort_use_lines(&result)
 }
 
-fn use_namespace_prefix(line: &str) -> String {
-    let trimmed = line.trim();
-    let path = trimmed.strip_prefix("use ").unwrap_or(trimmed).trim_start_matches('\\');
-    path.split('\\').next().unwrap_or("").to_lowercase()
-}
-
 fn sort_use_lines(code: &str) -> String {
     let lines: Vec<&str> = code.lines().collect();
     let mut result: Vec<String> = Vec::new();
@@ -702,13 +761,7 @@ fn sort_use_lines(code: &str) -> String {
             use_group.sort_by_key(|a| a.trim().to_lowercase());
             use_group.dedup_by(|a, b| a.trim() == b.trim());
 
-            let mut prev_prefix = String::new();
             for line in use_group {
-                let prefix = use_namespace_prefix(line);
-                if !prev_prefix.is_empty() && prefix != prev_prefix {
-                    result.push(String::new());
-                }
-                prev_prefix = prefix;
                 result.push(line.to_string());
             }
             if i < lines.len() && !lines[i].trim().is_empty() {
