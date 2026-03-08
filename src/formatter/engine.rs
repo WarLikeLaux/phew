@@ -4,7 +4,7 @@ use super::indent::{
     INDENT, MAX_LINE_LENGTH, count_semicolons_outside_parens, has_switch_case, is_header_php_block,
     is_php_block_closer, is_php_block_opener, is_switch_case_peer, reindent_php_block, split_header_and_opener,
 };
-use super::php::format_php_code;
+use super::php::{format_php_code, join_php_lines};
 use super::split::find_ternary_positions;
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
@@ -84,7 +84,7 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
         .iter()
         .map(|c| match c {
             Node::Text(s) => s.trim().to_string(),
-            Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(s)),
+            Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(&join_php_lines(s))),
             Node::PhpBlock(s) if is_single_echo_block(s) => {
                 let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
                 let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
