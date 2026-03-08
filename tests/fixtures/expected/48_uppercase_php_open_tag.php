@@ -1,2 +1,5 @@
 <?php $title = 'Hello'; ?>
-<div><?= $title ?><?= strtoupper($title) ?></div>
+<div>
+    <?= $title ?>
+    <?= strtoupper($title) ?>
+</div>
