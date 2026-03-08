@@ -49,6 +49,24 @@ fn consume_attr_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> S
     {
         chars.next();
         while let Some(&c) = chars.peek() {
+            if c == '<' {
+                let mut look = chars.clone();
+                look.next();
+                if look.peek() == Some(&'?') {
+                    value.push(c);
+                    chars.next();
+                    while let Some(&pc) = chars.peek() {
+                        value.push(pc);
+                        chars.next();
+                        if pc == '?' && chars.peek() == Some(&'>') {
+                            value.push('>');
+                            chars.next();
+                            break;
+                        }
+                    }
+                    continue;
+                }
+            }
             if c == quote {
                 chars.next();
                 break;
