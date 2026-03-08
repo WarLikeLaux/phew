@@ -106,11 +106,28 @@ fn is_inline_content(children: &[Node]) -> bool {
     })
 }
 
+fn collapse_whitespace(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut prev_ws = false;
+    for ch in s.chars() {
+        if ch.is_whitespace() {
+            if !prev_ws {
+                result.push(' ');
+            }
+            prev_ws = true;
+        } else {
+            result.push(ch);
+            prev_ws = false;
+        }
+    }
+    result
+}
+
 fn format_inline_content(children: &[Node]) -> String {
-    children
+    let raw: String = children
         .iter()
         .map(|c| match c {
-            Node::Text(s) => s.trim().to_string(),
+            Node::Text(s) => collapse_whitespace(s),
             Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(&join_php_lines(s))),
             Node::PhpBlock(s) if is_single_echo_block(s) => {
                 let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
@@ -119,7 +136,8 @@ fn format_inline_content(children: &[Node]) -> String {
             }
             _ => String::new(),
         })
-        .collect()
+        .collect();
+    raw.trim().to_string()
 }
 
 fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> String {
@@ -168,6 +186,20 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             &pad,
             output,
         );
+    } else if children
+        .iter()
+        .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()))
+    {
+        emit_open_tag(
+            &TagParams {
+                name,
+                attributes,
+                self_closing: false,
+            },
+            &pad,
+            output,
+        );
+        output.push_str(&format!("{pad}</{name}>\n"));
     } else if is_inline_content(children)
         && (!is_block_element(name)
             || children
