@@ -337,8 +337,12 @@ pub fn matches_keyword_at(chars: &[char], pos: usize, keyword: &str) -> bool {
 
 pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result: &mut String) {
     let leading = (count_leading_closers(formatted) as i32).min(1);
-    let is_ternary_cont = formatted.starts_with("? ") || formatted.starts_with(": ");
-    let extra = i32::from(is_ternary_cont);
+    let is_continuation = formatted.starts_with("? ")
+        || formatted.starts_with(": ")
+        || formatted.starts_with("|| ")
+        || formatted.starts_with("&& ")
+        || formatted.starts_with(". ");
+    let extra = i32::from(is_continuation);
     let write_depth = (*depth - leading + extra).max(0) as usize;
     let inner_pad = INDENT.repeat(write_depth);
     let base_pad = format!("{pad}{inner_pad}");
@@ -615,7 +619,7 @@ pub fn reindent_php_block(code: &str, pad: &str) -> String {
         let trimmed = line.trim();
 
         if in_docblock {
-            if trimmed == "*/" {
+            if trimmed == "*/" || trimmed == "**/" {
                 in_docblock = false;
                 let all_var = !docblock_bodies.is_empty() && docblock_bodies.iter().all(|b| b.starts_with("@var "));
                 if all_var {

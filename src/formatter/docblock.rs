@@ -99,7 +99,8 @@ pub fn is_docblock_only(code: &str) -> bool {
     if lines.len() < 2 {
         return false;
     }
-    if lines.first().copied() != Some("/**") || lines.last().copied() != Some("*/") {
+    let last = lines.last().copied().unwrap_or("");
+    if lines.first().copied() != Some("/**") || (last != "*/" && last != "**/") {
         return false;
     }
 

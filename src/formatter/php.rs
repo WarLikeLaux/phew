@@ -65,6 +65,7 @@ pub fn format_php_code(code: &str) -> String {
 pub fn join_php_lines(code: &str) -> String {
     code.lines()
         .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
         .replace(" ->", "->")

@@ -4,7 +4,7 @@ use super::indent::{
     INDENT, MAX_LINE_LENGTH, count_semicolons_outside_parens, has_switch_case, is_header_php_block,
     is_php_block_closer, is_php_block_opener, is_switch_case_peer, reindent_php_block, split_header_and_opener,
 };
-use super::php::format_php_code;
+use super::php::{format_php_code, join_php_lines};
 use super::split::find_ternary_positions;
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
@@ -70,6 +70,34 @@ fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
     output.push_str(&format!("{pad}{tail}\n"));
 }
 
+const BLOCK_ELEMENTS: &[&str] = &[
+    "div",
+    "section",
+    "article",
+    "main",
+    "aside",
+    "nav",
+    "header",
+    "footer",
+    "form",
+    "fieldset",
+    "details",
+    "figure",
+    "figcaption",
+    "dl",
+    "ol",
+    "ul",
+    "table",
+    "thead",
+    "tbody",
+    "tfoot",
+    "tr",
+];
+
+fn is_block_element(name: &str) -> bool {
+    BLOCK_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
 fn is_inline_content(children: &[Node]) -> bool {
     children.iter().all(|c| match c {
         Node::Text(_) | Node::PhpEcho(_) => true,
@@ -78,13 +106,12 @@ fn is_inline_content(children: &[Node]) -> bool {
     })
 }
 
-fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> String {
-    let attrs = format_attributes(attributes);
-    let content: String = children
+fn format_inline_content(children: &[Node]) -> String {
+    children
         .iter()
         .map(|c| match c {
             Node::Text(s) => s.trim().to_string(),
-            Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(s)),
+            Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(&join_php_lines(s))),
             Node::PhpBlock(s) if is_single_echo_block(s) => {
                 let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
                 let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
@@ -92,7 +119,12 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
             }
             _ => String::new(),
         })
-        .collect();
+        .collect()
+}
+
+fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> String {
+    let attrs = format_attributes(attributes);
+    let content = format_inline_content(children);
     format!("<{name}{attrs}>{content}</{name}>")
 }
 
@@ -136,24 +168,49 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             &pad,
             output,
         );
-    } else if is_inline_content(children) {
+    } else if is_inline_content(children)
+        && (!is_block_element(name)
+            || children
+                .iter()
+                .filter(|c| matches!(c, Node::PhpEcho(_) | Node::PhpBlock(_)))
+                .count()
+                <= 1)
+    {
         let inline = format_inline(name, attributes, children);
         if pad.len() + inline.len() <= MAX_LINE_LENGTH {
             output.push_str(&pad);
             output.push_str(&inline);
             output.push('\n');
         } else {
-            emit_open_tag(
-                &TagParams {
-                    name,
-                    attributes,
-                    self_closing: false,
-                },
-                &pad,
-                output,
-            );
-            format_nodes(children, depth + 1, output);
-            output.push_str(&format!("{pad}</{name}>\n"));
+            let content = format_inline_content(children);
+            let inner_pad = format!("{pad}{INDENT}");
+            let content_line = format!("{inner_pad}{content}");
+            if content_line.len() <= MAX_LINE_LENGTH {
+                emit_open_tag(
+                    &TagParams {
+                        name,
+                        attributes,
+                        self_closing: false,
+                    },
+                    &pad,
+                    output,
+                );
+                output.push_str(&content_line);
+                output.push('\n');
+                output.push_str(&format!("{pad}</{name}>\n"));
+            } else {
+                emit_open_tag(
+                    &TagParams {
+                        name,
+                        attributes,
+                        self_closing: false,
+                    },
+                    &pad,
+                    output,
+                );
+                format_nodes(children, depth + 1, output);
+                output.push_str(&format!("{pad}</{name}>\n"));
+            }
         }
     } else {
         emit_open_tag(
