@@ -186,20 +186,28 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             &pad,
             output,
         );
-    } else if children
-        .iter()
-        .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()))
+    } else if children.is_empty()
+        || children
+            .iter()
+            .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()))
     {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: false,
-            },
-            &pad,
-            output,
-        );
-        output.push_str(&format!("{pad}</{name}>\n"));
+        let attrs = format_attributes(attributes);
+        let inline_tag = format!("{pad}<{name}{attrs}></{name}>");
+        if inline_tag.len() <= MAX_LINE_LENGTH {
+            output.push_str(&inline_tag);
+            output.push('\n');
+        } else {
+            emit_open_tag(
+                &TagParams {
+                    name,
+                    attributes,
+                    self_closing: false,
+                },
+                &pad,
+                output,
+            );
+            output.push_str(&format!("{pad}</{name}>\n"));
+        }
     } else if is_inline_content(children)
         && (!is_block_element(name)
             || children
@@ -217,7 +225,10 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             let content = format_inline_content(children);
             let inner_pad = format!("{pad}{INDENT}");
             let content_line = format!("{inner_pad}{content}");
-            if content_line.len() <= MAX_LINE_LENGTH {
+            let has_text = children
+                .iter()
+                .any(|c| matches!(c, Node::Text(s) if !s.trim().is_empty()));
+            if content_line.len() <= MAX_LINE_LENGTH || (!is_block_element(name) && has_text) {
                 emit_open_tag(
                     &TagParams {
                         name,
