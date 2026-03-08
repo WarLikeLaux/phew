@@ -11,7 +11,7 @@
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-49_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
 [![Fixtures](https://img.shields.io/badge/Fixtures-99_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.6.6-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-0.6.7-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -140,7 +140,7 @@ src/
 │   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (236 строк)
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
-│   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (662 строки)
+│   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (673 строки)
 │   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (781 строка)
 │   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (981 строка)
 │   ├── echo.rs          # Форматирование PHP echo: chain, concat, ternary (127 строк)
