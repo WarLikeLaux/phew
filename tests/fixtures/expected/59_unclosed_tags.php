@@ -4,8 +4,8 @@
         <p>
             Second paragraph without closing first
             <div class="inner">
-                <br />
-                <img src="photo.jpg" />
+                <br>
+                <img src="photo.jpg">
                 <p>Third inside div</p>
             </div>
         </p>

@@ -3,7 +3,7 @@
         <?= $model->name ?>
     </a>
 </div>
-<input type="hidden" name="token" value="<?= Yii::$app->request->csrfToken ?>" />
+<input type="hidden" name="token" value="<?= Yii::$app->request->csrfToken ?>">
 <div
     id="item-<?= $item->id ?>"
     class="<?= $item->isNew ? 'new' : '' ?> item-card"
