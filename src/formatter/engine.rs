@@ -516,6 +516,130 @@ fn emit_php_echo(code: &str, pad: &str, state: &mut PhpDepthState, output: &mut 
     }
 }
 
+const INLINE_ELEMENTS: &[&str] = &[
+    "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "del", "dfn", "em", "i", "ins", "kbd", "mark", "q",
+    "s", "samp", "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr",
+];
+
+fn is_truly_inline_element(name: &str) -> bool {
+    INLINE_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
+fn is_inline_element_node(node: &Node) -> bool {
+    match node {
+        Node::Element { name, children, .. } => {
+            is_truly_inline_element(name) && (is_void_element(name) || is_inline_content(children))
+        }
+        _ => false,
+    }
+}
+
+fn render_node_inline(node: &Node) -> String {
+    match node {
+        Node::Text(s) => collapse_whitespace(s),
+        Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(&join_php_lines(s))),
+        Node::PhpBlock(s) if is_single_echo_block(s) => {
+            let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
+            let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
+            format!("<?= {} ?>", format_php_code(expr))
+        }
+        Node::Element {
+            name,
+            attributes,
+            children,
+        } => {
+            if is_void_element(name) {
+                let attrs = format_attributes(attributes);
+                format!("<{name}{attrs} />")
+            } else {
+                format_inline(name, attributes, children)
+            }
+        }
+        _ => String::new(),
+    }
+}
+
+fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
+    let mut end = start;
+    let mut has_text = false;
+    let mut has_echo = false;
+    let mut has_inline_elem = false;
+    while end < nodes.len() {
+        match &nodes[end] {
+            Node::Text(s) => {
+                if !s.trim().is_empty() {
+                    has_text = true;
+                } else if s.contains('\n') && (has_echo || has_inline_elem) {
+                    end += 1;
+                    break;
+                }
+                end += 1;
+            }
+            Node::PhpEcho(code) => {
+                if is_echo_block_opener(code) || is_echo_block_closer(code) {
+                    break;
+                }
+                has_echo = true;
+                end += 1;
+            }
+            Node::Element { name, .. } if is_inline_element_node(&nodes[end]) => {
+                has_inline_elem = true;
+                end += 1;
+                if is_void_element(name) && name.eq_ignore_ascii_case("br") {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    if has_echo && (has_text || has_inline_elem) && end > start + 1 {
+        Some(end)
+    } else {
+        None
+    }
+}
+
+fn emit_inline_run(nodes: &[Node], pad: &str, depth: usize, output: &mut String) {
+    let raw: String = nodes.iter().map(render_node_inline).collect();
+    let content = raw.trim().to_string();
+    if content.is_empty() {
+        return;
+    }
+    let line = format!("{pad}{content}");
+    if line.len() <= MAX_LINE_LENGTH {
+        output.push_str(&line);
+        output.push('\n');
+    } else {
+        for node in nodes {
+            format_nodes(std::slice::from_ref(node), depth, output);
+        }
+    }
+}
+
+fn try_merge_header_blocks(nodes: &[Node], start: usize, code: &str) -> Option<(String, usize)> {
+    if !is_header_php_block(code) && !is_docblock_only(code) {
+        return None;
+    }
+    let mut merged = code.trim().to_string();
+    let mut j = start + 1;
+    let mut merged_any = false;
+    while j < nodes.len() {
+        match &nodes[j] {
+            Node::Text(s) if s.trim().is_empty() => j += 1,
+            Node::PhpBlock(next) if is_header_php_block(next) || is_docblock_only(next) => {
+                if !merged.is_empty() {
+                    merged.push('\n');
+                }
+                merged.push_str(next.trim());
+                merged_any = true;
+                j += 1;
+            }
+            _ => break,
+        }
+    }
+    merged_any.then_some((merged, j))
+}
+
 fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
     let mut state = PhpDepthState {
         depth,
@@ -524,6 +648,14 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
     let mut i = 0usize;
     while i < nodes.len() {
         let pad = INDENT.repeat(state.depth);
+
+        if matches!(&nodes[i], Node::Text(_) | Node::PhpEcho(_)) || is_inline_element_node(&nodes[i]) {
+            if let Some(end) = collect_inline_run(nodes, i) {
+                emit_inline_run(&nodes[i..end], &pad, state.depth, output);
+                i = end;
+                continue;
+            }
+        }
 
         match &nodes[i] {
             Node::Element {
@@ -542,31 +674,8 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 }
             }
             Node::PhpBlock(code) => {
-                if state.depth == 0 && (is_header_php_block(code) || is_docblock_only(code)) {
-                    let mut merged = code.trim().to_string();
-                    let mut j = i + 1;
-                    let mut merged_any = false;
-
-                    while j < nodes.len() {
-                        match &nodes[j] {
-                            Node::Text(s) if s.trim().is_empty() => {
-                                j += 1;
-                            }
-                            Node::PhpBlock(next_code)
-                                if is_header_php_block(next_code) || is_docblock_only(next_code) =>
-                            {
-                                if !merged.is_empty() {
-                                    merged.push('\n');
-                                }
-                                merged.push_str(next_code.trim());
-                                merged_any = true;
-                                j += 1;
-                            }
-                            _ => break,
-                        }
-                    }
-
-                    if merged_any {
+                if state.depth == 0 {
+                    if let Some((merged, j)) = try_merge_header_blocks(nodes, i, code) {
                         emit_php_block(&merged, &pad, &mut state, output);
                         i = j;
                         continue;
@@ -575,12 +684,8 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 emit_php_block(code, &pad, &mut state, output);
             }
             Node::PhpEcho(code) => emit_php_echo(code, &pad, &mut state, output),
-            Node::Doctype(s) => {
-                output.push_str(&format!("{pad}<!DOCTYPE {s}>\n"));
-            }
-            Node::Comment(s) => {
-                output.push_str(&format!("{pad}<!-- {s} -->\n"));
-            }
+            Node::Doctype(s) => output.push_str(&format!("{pad}<!DOCTYPE {s}>\n")),
+            Node::Comment(s) => output.push_str(&format!("{pad}<!-- {s} -->\n")),
         }
 
         i += 1;
