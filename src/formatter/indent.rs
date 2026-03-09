@@ -5,6 +5,10 @@ use super::split::try_split_long_line;
 pub const INDENT: &str = "    ";
 pub const MAX_LINE_LENGTH: usize = 120;
 
+pub fn visual_len(s: &str) -> usize {
+    s.chars().count()
+}
+
 pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
     let bytes = code.as_bytes();
     let needle_bytes = needle.as_bytes();

@@ -1,4 +1,4 @@
-use super::indent::{INDENT, MAX_LINE_LENGTH};
+use super::indent::{INDENT, MAX_LINE_LENGTH, visual_len};
 use super::php::{split_by_args, split_by_commas};
 
 pub fn find_matching_close(chars: &[char], open_pos: usize) -> Option<usize> {
@@ -104,7 +104,7 @@ pub fn append_ternary_value(result: &mut String, marker: char, value: &str, line
 }
 
 pub fn try_split_long_line(formatted: &str, base_pad: &str) -> Option<String> {
-    if base_pad.len() + formatted.len() <= MAX_LINE_LENGTH {
+    if visual_len(base_pad) + visual_len(formatted) <= MAX_LINE_LENGTH {
         return None;
     }
 
@@ -303,7 +303,7 @@ fn format_assignment_array_item(item: &str, pad: &str) -> String {
         }
     }
 
-    if pad.len() + item.len() + 1 > MAX_LINE_LENGTH {
+    if visual_len(pad) + visual_len(item) + 1 > MAX_LINE_LENGTH {
         if let Some(split) = try_split_long_line(item, pad) {
             let trimmed = split.trim_end_matches('\n');
             return format!("{trimmed},\n");
@@ -326,8 +326,9 @@ fn expand_assignment_array_literal(array: &str, pad: &str, trailing_comma: bool)
     }
 
     let first = items[0].trim();
-    let should_expand =
-        items.len() > 1 || first.starts_with('[') || pad.len() + INDENT.len() + first.len() + 1 > MAX_LINE_LENGTH;
+    let should_expand = items.len() > 1
+        || first.starts_with('[')
+        || visual_len(pad) + INDENT.len() + visual_len(first) + 1 > MAX_LINE_LENGTH;
     if !should_expand {
         return None;
     }
@@ -372,7 +373,7 @@ fn expand_assignment_array(formatted: &str, base_pad: &str) -> Option<String> {
     let first = items[0].trim();
     let should_expand = items.len() > 1
         || first.starts_with('[')
-        || base_pad.len() + lhs.len() + 2 + array_part.len() > MAX_LINE_LENGTH;
+        || visual_len(base_pad) + visual_len(lhs) + 2 + visual_len(array_part) > MAX_LINE_LENGTH;
     if !should_expand {
         return None;
     }
@@ -391,7 +392,7 @@ pub fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> St
     let mut result = String::new();
     let prefix_trimmed = prefix.trim();
 
-    if pad.len() + prefix_trimmed.len() > MAX_LINE_LENGTH {
+    if visual_len(pad) + visual_len(prefix_trimmed) > MAX_LINE_LENGTH {
         let mut prefix_parts = split_by_commas(prefix_trimmed);
         if prefix_parts.len() > 1 {
             let last = prefix_parts.pop().unwrap_or_default();
@@ -443,7 +444,7 @@ pub fn build_split(prefix: &str, args: &[String], suffix: &str, pad: &str) -> St
         result.push_str(&split);
         return result;
     }
-    if pad.len() + suffix_trimmed.len() > MAX_LINE_LENGTH {
+    if visual_len(pad) + visual_len(suffix_trimmed) > MAX_LINE_LENGTH {
         if let Some(split) = try_split_long_line(suffix_trimmed, pad) {
             result.push_str(&split);
             return result;
@@ -470,7 +471,7 @@ fn split_long_by_commas_from_depth(formatted: &str, pad: &str, start_depth: i32,
             line.push(',');
         }
 
-        if pad.len() + line.len() > MAX_LINE_LENGTH {
+        if visual_len(pad) + visual_len(&line) > MAX_LINE_LENGTH {
             if let Some(expanded) = expand_bare_array_with_suffix(&line, pad) {
                 result.push_str(&expanded);
                 continue;
@@ -950,7 +951,7 @@ pub fn expand_nested_array(arg: &str, pad: &str) -> Option<String> {
     let nested_pad = format!("{pad}{INDENT}");
     let mut result = format!("{pad}{key} [\n");
     for item in &items {
-        if nested_pad.len() + item.len() + 1 > MAX_LINE_LENGTH {
+        if visual_len(&nested_pad) + visual_len(item) + 1 > MAX_LINE_LENGTH {
             if let Some(expanded) = expand_nested_array(item, &nested_pad) {
                 result.push_str(&expanded);
                 continue;

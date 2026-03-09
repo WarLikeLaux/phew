@@ -3,6 +3,7 @@ use super::echo::{contains_break, format_echo, is_echo_block_closer, is_echo_blo
 use super::indent::{
     INDENT, MAX_LINE_LENGTH, count_semicolons_outside_parens, has_switch_case, is_header_php_block,
     is_php_block_closer, is_php_block_opener, is_switch_case_peer, reindent_php_block, split_header_and_opener,
+    visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
 use super::split::find_ternary_positions;
@@ -54,7 +55,7 @@ fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
     let name = tag.name;
     let single = format!("{pad}<{name}{attrs}{tail}");
 
-    if tag.attributes.is_empty() || single.len() <= MAX_LINE_LENGTH {
+    if tag.attributes.is_empty() || visual_len(&single) <= MAX_LINE_LENGTH {
         output.push_str(&single);
         output.push('\n');
         return;
@@ -193,7 +194,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
     {
         let attrs = format_attributes(attributes);
         let inline_tag = format!("{pad}<{name}{attrs}></{name}>");
-        if inline_tag.len() <= MAX_LINE_LENGTH {
+        if visual_len(&inline_tag) <= MAX_LINE_LENGTH {
             output.push_str(&inline_tag);
             output.push('\n');
         } else {
@@ -217,7 +218,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
                 <= 1)
     {
         let inline = format_inline(name, attributes, children);
-        if pad.len() + inline.len() <= MAX_LINE_LENGTH {
+        if visual_len(&pad) + visual_len(&inline) <= MAX_LINE_LENGTH {
             output.push_str(&pad);
             output.push_str(&inline);
             output.push('\n');
@@ -228,7 +229,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             let has_text = children
                 .iter()
                 .any(|c| matches!(c, Node::Text(s) if !s.trim().is_empty()));
-            if content_line.len() <= MAX_LINE_LENGTH || (!is_block_element(name) && has_text) {
+            if visual_len(&content_line) <= MAX_LINE_LENGTH || (!is_block_element(name) && has_text) {
                 emit_open_tag(
                     &TagParams {
                         name,
@@ -411,7 +412,7 @@ fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut S
     }
     let single = format!("{pad}<?php {formatted} ?>");
     let is_alt_syntax_opener = code.trim().ends_with(':');
-    if single.len() <= MAX_LINE_LENGTH || is_alt_syntax_opener {
+    if visual_len(&single) <= MAX_LINE_LENGTH || is_alt_syntax_opener {
         output.push_str(&format!("{single}\n"));
         if is_php_block_opener(code) {
             *depth += 1;
@@ -606,7 +607,7 @@ fn emit_inline_run(nodes: &[Node], pad: &str, depth: usize, output: &mut String)
         return;
     }
     let line = format!("{pad}{content}");
-    if line.len() <= MAX_LINE_LENGTH {
+    if visual_len(&line) <= MAX_LINE_LENGTH {
         output.push_str(&line);
         output.push('\n');
     } else {
