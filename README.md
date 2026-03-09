@@ -11,7 +11,7 @@
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-49_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
 [![Fixtures](https://img.shields.io/badge/Fixtures-101_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.6.8-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-0.6.9-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -319,6 +319,7 @@ just fixtures       # или ./bin/check-fixtures
 | **0.6.0–0.6.4** | Use dedup/sorting, @var normalization, brace/comma breaks, symmetric depth tracking, nested array assignment splitting, 94 fixtures | ✅ |
 | **0.6.5–0.6.7** | PHP in attr quotes, docblock `**/`, block element formatting, continuation operators, inline text spaces, empty element rendering, 99 fixtures | ✅ |
 | **0.6.8** | Inline run grouping (текст + `<?=` + inline-элементы на одной строке), `<br>` как разделитель строк, 101 fixture | ✅ |
+| **0.6.9** | Глобальный фикс `visual_len`: подсчёт символов вместо байт для лимита 120 (корректная работа с кириллицей) | ✅ |
 | **0.7** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 
