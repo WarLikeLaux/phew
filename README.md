@@ -10,8 +10,8 @@
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-49_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-98_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.6.5-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Fixtures](https://img.shields.io/badge/Fixtures-103_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.6.10-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -58,6 +58,7 @@ View-файлы в Yii 2 - это `.php`, внутри которых HTML, PHP-
 - ✅ PHP внутри HTML-атрибутов с вложенными кавычками (`href="<?= "..." ?>"`)
 - ✅ Блочные элементы (`<div>`, `<section>` и др.) с несколькими PHP-тегами на отдельных строках
 - ✅ Continuation lines: отступ для `||`, `&&`, `.` операторов переноса
+- ✅ Inline run grouping: текст + `<?=` + inline-элементы (`<strong>`, `<em>`, `<br>` и др.) на одной строке
 - ✅ CLI: `--write`, `--tokens`, `--tree`, поддержка файлов и директорий
 
 ## Пример
@@ -140,9 +141,9 @@ src/
 │   ├── ast.rs           # AST: Element, Text, PhpBlock, PhpEcho (236 строк)
 │   └── tree.rs          # Построение дерева (заглушка)
 ├── formatter/
-│   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (630 строк)
-│   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (781 строка)
-│   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (981 строка)
+│   ├── engine.rs        # Оркестрация: emit HTML/PHP, format_nodes (723 строки)
+│   ├── indent.rs        # Реиндентация PHP-блоков, нормализация statements (786 строк)
+│   ├── split.rs         # Сплиттинг длинных строк, массивы, closure (982 строки)
 │   ├── echo.rs          # Форматирование PHP echo: chain, concat, ternary (127 строк)
 │   ├── docblock.rs      # Работа с docblock: expand, merge, flush, var normalization (207 строк)
 │   ├── php.rs           # PHP: keyword spacing, assignment, fat arrow, splitting (552 строки)
@@ -179,7 +180,7 @@ src/
 | `formatter::php` | 3 |
 | stubs (`config`, `parser::tree`, `formatter::html`, `formatter::yii`, `io::walker`, `io::writer`) | 6 |
 
-**98 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
+**103 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`):
 
 | # | Фикстура | Что тестирует |
 |---|----------|---------------|
@@ -281,6 +282,11 @@ src/
 | 96 | `php_in_attr_quotes` | PHP с кавычками внутри HTML-атрибутов |
 | 97 | `docblock_double_star_close` | Docblock с `**/` не удаляет код после себя |
 | 98 | `continuation_operators` | Отступы continuation lines (`\|\|`, `&&`, `.`) |
+| 99 | `inline_text_spaces` | Сохранение пробелов между текстом и `<?=` в inline-контенте |
+| 100 | `inline_text_with_multiple_echos` | Группировка текста с несколькими `<?=` на одной строке |
+| 101 | `inline_elements_with_echo` | Inline-элементы (`<strong>`, `<br>`) с `<?=` на одной строке |
+| 102 | `spaceship_operator` | Оператор spaceship `<=>` |
+| 103 | `method_chaining` | Цепочки вызовов методов |
 
 ```bash
 # Unit-тесты
@@ -312,7 +318,11 @@ just fixtures       # или ./bin/check-fixtures
 | **0.3** | Паттерны Yii 2, switch/case normalization, ::begin/::end, 45 fixtures | ✅ |
 | **0.4** | Decompose ≤50 lines, string-aware lexer/engine, uppercase PHP, short tags, textarea RCDATA, echo-in-parens, header+if, registerJs/registerCss, 56 fixtures | ✅ |
 | **0.5** | Docblock merge, use sorting, PSR-12 order, decompose engine.rs → 5 modules, 65 fixtures, 66 tests | ✅ |
-| **0.6** | Use dedup/sorting, @var normalization, brace/comma breaks, symmetric depth tracking, nested array assignment splitting, PHP in attr quotes, docblock `**/`, block element formatting, continuation operators, 98 fixtures, 49 tests | ✅ |
+| **0.6.0–0.6.4** | Use dedup/sorting, @var normalization, brace/comma breaks, symmetric depth tracking, nested array assignment splitting, 94 fixtures | ✅ |
+| **0.6.5–0.6.7** | PHP in attr quotes, docblock `**/`, block element formatting, continuation operators, inline text spaces, empty element rendering, 99 fixtures | ✅ |
+| **0.6.8** | Inline run grouping (текст + `<?=` + inline-элементы на одной строке), `<br>` как разделитель строк, 101 fixture | ✅ |
+| **0.6.9** | Глобальный фикс `visual_len`: подсчёт символов вместо байт для лимита 120 (корректная работа с кириллицей) | ✅ |
+| **0.6.10** | Spaceship operator, method chaining improvements, 103 fixtures | ✅ |
 | **0.7** | Конфиг `.phew.toml` | 🔜 |
 | **1.0** | Стабильный релиз | - |
 

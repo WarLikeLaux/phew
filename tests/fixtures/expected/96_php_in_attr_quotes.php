@@ -6,4 +6,4 @@
     Изменить
 </a>
 <a href="<?= Url::to(['view', 'id' => $model->id]) ?>" class="btn">View</a>
-<img src="<?= '/images/' . $model->photo ?>" alt="<?= $model->name ?>" />
+<img src="<?= '/images/' . $model->photo ?>" alt="<?= $model->name ?>">

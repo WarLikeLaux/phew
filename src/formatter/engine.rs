@@ -3,6 +3,7 @@ use super::echo::{contains_break, format_echo, is_echo_block_closer, is_echo_blo
 use super::indent::{
     INDENT, MAX_LINE_LENGTH, count_semicolons_outside_parens, has_switch_case, is_header_php_block,
     is_php_block_closer, is_php_block_opener, is_switch_case_peer, reindent_php_block, split_header_and_opener,
+    visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
 use super::split::find_ternary_positions;
@@ -42,19 +43,11 @@ fn format_attribute(attr: &Attribute) -> String {
     }
 }
 
-struct TagParams<'a> {
-    name: &'a str,
-    attributes: &'a [Attribute],
-    self_closing: bool,
-}
+fn emit_open_tag(name: &str, attributes: &[Attribute], pad: &str, output: &mut String) {
+    let attrs = format_attributes(attributes);
+    let single = format!("{pad}<{name}{attrs}>");
 
-fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
-    let attrs = format_attributes(tag.attributes);
-    let tail = if tag.self_closing { " />" } else { ">" };
-    let name = tag.name;
-    let single = format!("{pad}<{name}{attrs}{tail}");
-
-    if tag.attributes.is_empty() || single.len() <= MAX_LINE_LENGTH {
+    if attributes.is_empty() || visual_len(&single) <= MAX_LINE_LENGTH {
         output.push_str(&single);
         output.push('\n');
         return;
@@ -62,12 +55,12 @@ fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
 
     output.push_str(&format!("{pad}<{name}\n"));
     let attr_pad = format!("{pad}{INDENT}");
-    for attr in tag.attributes {
+    for attr in attributes {
         output.push_str(&attr_pad);
         output.push_str(&format_attribute(attr));
         output.push('\n');
     }
-    output.push_str(&format!("{pad}{tail}\n"));
+    output.push_str(&format!("{pad}>\n"));
 }
 
 const BLOCK_ELEMENTS: &[&str] = &[
@@ -106,11 +99,28 @@ fn is_inline_content(children: &[Node]) -> bool {
     })
 }
 
+fn collapse_whitespace(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut prev_ws = false;
+    for ch in s.chars() {
+        if ch.is_whitespace() {
+            if !prev_ws {
+                result.push(' ');
+            }
+            prev_ws = true;
+        } else {
+            result.push(ch);
+            prev_ws = false;
+        }
+    }
+    result
+}
+
 fn format_inline_content(children: &[Node]) -> String {
-    children
+    let raw: String = children
         .iter()
         .map(|c| match c {
-            Node::Text(s) => s.trim().to_string(),
+            Node::Text(s) => collapse_whitespace(s),
             Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(&join_php_lines(s))),
             Node::PhpBlock(s) if is_single_echo_block(s) => {
                 let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
@@ -119,7 +129,8 @@ fn format_inline_content(children: &[Node]) -> String {
             }
             _ => String::new(),
         })
-        .collect()
+        .collect();
+    raw.trim().to_string()
 }
 
 fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> String {
@@ -132,15 +143,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
     let (depth, output) = ctx;
     let pad = INDENT.repeat(depth);
     if RAW_TEXT_ELEMENTS.contains(&name.to_lowercase().as_str()) {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: false,
-            },
-            &pad,
-            output,
-        );
+        emit_open_tag(name, attributes, &pad, output);
         for child in children {
             if let Node::Text(s) = child {
                 let trimmed = s.trim_start_matches('\n').trim_end();
@@ -159,15 +162,21 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
         }
         output.push_str(&format!("{pad}</{name}>\n"));
     } else if children.is_empty() && is_void_element(name) {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: true,
-            },
-            &pad,
-            output,
-        );
+        emit_open_tag(name, attributes, &pad, output);
+    } else if children.is_empty()
+        || children
+            .iter()
+            .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()))
+    {
+        let attrs = format_attributes(attributes);
+        let inline_tag = format!("{pad}<{name}{attrs}></{name}>");
+        if visual_len(&inline_tag) <= MAX_LINE_LENGTH {
+            output.push_str(&inline_tag);
+            output.push('\n');
+        } else {
+            emit_open_tag(name, attributes, &pad, output);
+            output.push_str(&format!("{pad}</{name}>\n"));
+        }
     } else if is_inline_content(children)
         && (!is_block_element(name)
             || children
@@ -177,7 +186,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
                 <= 1)
     {
         let inline = format_inline(name, attributes, children);
-        if pad.len() + inline.len() <= MAX_LINE_LENGTH {
+        if visual_len(&pad) + visual_len(&inline) <= MAX_LINE_LENGTH {
             output.push_str(&pad);
             output.push_str(&inline);
             output.push('\n');
@@ -185,43 +194,22 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             let content = format_inline_content(children);
             let inner_pad = format!("{pad}{INDENT}");
             let content_line = format!("{inner_pad}{content}");
-            if content_line.len() <= MAX_LINE_LENGTH {
-                emit_open_tag(
-                    &TagParams {
-                        name,
-                        attributes,
-                        self_closing: false,
-                    },
-                    &pad,
-                    output,
-                );
+            let has_text = children
+                .iter()
+                .any(|c| matches!(c, Node::Text(s) if !s.trim().is_empty()));
+            if visual_len(&content_line) <= MAX_LINE_LENGTH || (!is_block_element(name) && has_text) {
+                emit_open_tag(name, attributes, &pad, output);
                 output.push_str(&content_line);
                 output.push('\n');
                 output.push_str(&format!("{pad}</{name}>\n"));
             } else {
-                emit_open_tag(
-                    &TagParams {
-                        name,
-                        attributes,
-                        self_closing: false,
-                    },
-                    &pad,
-                    output,
-                );
+                emit_open_tag(name, attributes, &pad, output);
                 format_nodes(children, depth + 1, output);
                 output.push_str(&format!("{pad}</{name}>\n"));
             }
         }
     } else {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: false,
-            },
-            &pad,
-            output,
-        );
+        emit_open_tag(name, attributes, &pad, output);
         format_nodes(children, depth + 1, output);
         output.push_str(&format!("{pad}</{name}>\n"));
     }
@@ -368,7 +356,7 @@ fn emit_single_php_long(code: &str, pad: &str, depth: &mut usize, output: &mut S
     }
     let single = format!("{pad}<?php {formatted} ?>");
     let is_alt_syntax_opener = code.trim().ends_with(':');
-    if single.len() <= MAX_LINE_LENGTH || is_alt_syntax_opener {
+    if visual_len(&single) <= MAX_LINE_LENGTH || is_alt_syntax_opener {
         output.push_str(&format!("{single}\n"));
         if is_php_block_opener(code) {
             *depth += 1;
@@ -473,6 +461,130 @@ fn emit_php_echo(code: &str, pad: &str, state: &mut PhpDepthState, output: &mut 
     }
 }
 
+const INLINE_ELEMENTS: &[&str] = &[
+    "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "del", "dfn", "em", "i", "ins", "kbd", "mark", "q",
+    "s", "samp", "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr",
+];
+
+fn is_truly_inline_element(name: &str) -> bool {
+    INLINE_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
+fn is_inline_element_node(node: &Node) -> bool {
+    match node {
+        Node::Element { name, children, .. } => {
+            is_truly_inline_element(name) && (is_void_element(name) || is_inline_content(children))
+        }
+        _ => false,
+    }
+}
+
+fn render_node_inline(node: &Node) -> String {
+    match node {
+        Node::Text(s) => collapse_whitespace(s),
+        Node::PhpEcho(s) => format!("<?= {} ?>", format_php_code(&join_php_lines(s))),
+        Node::PhpBlock(s) if is_single_echo_block(s) => {
+            let expr = s.trim().strip_prefix("echo ").unwrap_or(s);
+            let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
+            format!("<?= {} ?>", format_php_code(expr))
+        }
+        Node::Element {
+            name,
+            attributes,
+            children,
+        } => {
+            if is_void_element(name) {
+                let attrs = format_attributes(attributes);
+                format!("<{name}{attrs}>")
+            } else {
+                format_inline(name, attributes, children)
+            }
+        }
+        _ => String::new(),
+    }
+}
+
+fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
+    let mut end = start;
+    let mut has_text = false;
+    let mut has_echo = false;
+    let mut has_inline_elem = false;
+    while end < nodes.len() {
+        match &nodes[end] {
+            Node::Text(s) => {
+                if !s.trim().is_empty() {
+                    has_text = true;
+                } else if s.contains('\n') && (has_echo || has_inline_elem) {
+                    end += 1;
+                    break;
+                }
+                end += 1;
+            }
+            Node::PhpEcho(code) => {
+                if is_echo_block_opener(code) || is_echo_block_closer(code) {
+                    break;
+                }
+                has_echo = true;
+                end += 1;
+            }
+            Node::Element { name, .. } if is_inline_element_node(&nodes[end]) => {
+                has_inline_elem = true;
+                end += 1;
+                if is_void_element(name) && name.eq_ignore_ascii_case("br") {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+    if has_echo && (has_text || has_inline_elem) && end > start + 1 {
+        Some(end)
+    } else {
+        None
+    }
+}
+
+fn emit_inline_run(nodes: &[Node], pad: &str, depth: usize, output: &mut String) {
+    let raw: String = nodes.iter().map(render_node_inline).collect();
+    let content = raw.trim().to_string();
+    if content.is_empty() {
+        return;
+    }
+    let line = format!("{pad}{content}");
+    if visual_len(&line) <= MAX_LINE_LENGTH {
+        output.push_str(&line);
+        output.push('\n');
+    } else {
+        for node in nodes {
+            format_nodes(std::slice::from_ref(node), depth, output);
+        }
+    }
+}
+
+fn try_merge_header_blocks(nodes: &[Node], start: usize, code: &str) -> Option<(String, usize)> {
+    if !is_header_php_block(code) && !is_docblock_only(code) {
+        return None;
+    }
+    let mut merged = code.trim().to_string();
+    let mut j = start + 1;
+    let mut merged_any = false;
+    while j < nodes.len() {
+        match &nodes[j] {
+            Node::Text(s) if s.trim().is_empty() => j += 1,
+            Node::PhpBlock(next) if is_header_php_block(next) || is_docblock_only(next) => {
+                if !merged.is_empty() {
+                    merged.push('\n');
+                }
+                merged.push_str(next.trim());
+                merged_any = true;
+                j += 1;
+            }
+            _ => break,
+        }
+    }
+    merged_any.then_some((merged, j))
+}
+
 fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
     let mut state = PhpDepthState {
         depth,
@@ -481,6 +593,14 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
     let mut i = 0usize;
     while i < nodes.len() {
         let pad = INDENT.repeat(state.depth);
+
+        if matches!(&nodes[i], Node::Text(_) | Node::PhpEcho(_)) || is_inline_element_node(&nodes[i]) {
+            if let Some(end) = collect_inline_run(nodes, i) {
+                emit_inline_run(&nodes[i..end], &pad, state.depth, output);
+                i = end;
+                continue;
+            }
+        }
 
         match &nodes[i] {
             Node::Element {
@@ -499,31 +619,8 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 }
             }
             Node::PhpBlock(code) => {
-                if state.depth == 0 && (is_header_php_block(code) || is_docblock_only(code)) {
-                    let mut merged = code.trim().to_string();
-                    let mut j = i + 1;
-                    let mut merged_any = false;
-
-                    while j < nodes.len() {
-                        match &nodes[j] {
-                            Node::Text(s) if s.trim().is_empty() => {
-                                j += 1;
-                            }
-                            Node::PhpBlock(next_code)
-                                if is_header_php_block(next_code) || is_docblock_only(next_code) =>
-                            {
-                                if !merged.is_empty() {
-                                    merged.push('\n');
-                                }
-                                merged.push_str(next_code.trim());
-                                merged_any = true;
-                                j += 1;
-                            }
-                            _ => break,
-                        }
-                    }
-
-                    if merged_any {
+                if state.depth == 0 {
+                    if let Some((merged, j)) = try_merge_header_blocks(nodes, i, code) {
                         emit_php_block(&merged, &pad, &mut state, output);
                         i = j;
                         continue;
@@ -532,12 +629,8 @@ fn format_nodes(nodes: &[Node], depth: usize, output: &mut String) {
                 emit_php_block(code, &pad, &mut state, output);
             }
             Node::PhpEcho(code) => emit_php_echo(code, &pad, &mut state, output),
-            Node::Doctype(s) => {
-                output.push_str(&format!("{pad}<!DOCTYPE {s}>\n"));
-            }
-            Node::Comment(s) => {
-                output.push_str(&format!("{pad}<!-- {s} -->\n"));
-            }
+            Node::Doctype(s) => output.push_str(&format!("{pad}<!DOCTYPE {s}>\n")),
+            Node::Comment(s) => output.push_str(&format!("{pad}<!-- {s} -->\n")),
         }
 
         i += 1;
@@ -580,7 +673,7 @@ mod tests {
 
     #[test]
     fn self_closing_tag() {
-        assert_eq!(format_str("<br />"), "<br />\n");
+        assert_eq!(format_str("<br />"), "<br>\n");
     }
 
     #[test]

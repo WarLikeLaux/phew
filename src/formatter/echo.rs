@@ -1,4 +1,4 @@
-use super::indent::{INDENT, MAX_LINE_LENGTH, contains_outside_strings};
+use super::indent::{INDENT, MAX_LINE_LENGTH, contains_outside_strings, visual_len};
 use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
 use super::split::{expand_bare_array, expand_nested_array, find_ternary_positions, try_split_long_line};
 
@@ -64,7 +64,7 @@ pub fn format_echo(code: &str, pad: &str) -> String {
     let combined = format!("{formatted} ?>");
     let single = format!("{pad}<?= {combined}");
 
-    if single.len() <= MAX_LINE_LENGTH {
+    if visual_len(&single) <= MAX_LINE_LENGTH {
         return format!("{single}\n");
     }
 

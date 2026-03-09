@@ -5,6 +5,10 @@ use super::split::try_split_long_line;
 pub const INDENT: &str = "    ";
 pub const MAX_LINE_LENGTH: usize = 120;
 
+pub fn visual_len(s: &str) -> usize {
+    s.chars().count()
+}
+
 pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
     let bytes = code.as_bytes();
     let needle_bytes = needle.as_bytes();
@@ -341,7 +345,8 @@ pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result:
         || formatted.starts_with(": ")
         || formatted.starts_with("|| ")
         || formatted.starts_with("&& ")
-        || formatted.starts_with(". ");
+        || formatted.starts_with(". ")
+        || formatted.starts_with("->");
     let extra = i32::from(is_continuation);
     let write_depth = (*depth - leading + extra).max(0) as usize;
     let inner_pad = INDENT.repeat(write_depth);

@@ -17,7 +17,7 @@ pub fn format_php_code(code: &str) -> String {
             continue;
         }
 
-        if ch == '=' && i + 1 < len && chars[i + 1] == '>' {
+        if ch == '=' && i + 1 < len && chars[i + 1] == '>' && !result.ends_with('<') {
             i = format_fat_arrow(&chars, i, &mut result);
             continue;
         }
