@@ -43,19 +43,11 @@ fn format_attribute(attr: &Attribute) -> String {
     }
 }
 
-struct TagParams<'a> {
-    name: &'a str,
-    attributes: &'a [Attribute],
-    self_closing: bool,
-}
+fn emit_open_tag(name: &str, attributes: &[Attribute], pad: &str, output: &mut String) {
+    let attrs = format_attributes(attributes);
+    let single = format!("{pad}<{name}{attrs}>");
 
-fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
-    let attrs = format_attributes(tag.attributes);
-    let tail = if tag.self_closing { " />" } else { ">" };
-    let name = tag.name;
-    let single = format!("{pad}<{name}{attrs}{tail}");
-
-    if tag.attributes.is_empty() || visual_len(&single) <= MAX_LINE_LENGTH {
+    if attributes.is_empty() || visual_len(&single) <= MAX_LINE_LENGTH {
         output.push_str(&single);
         output.push('\n');
         return;
@@ -63,12 +55,12 @@ fn emit_open_tag(tag: &TagParams, pad: &str, output: &mut String) {
 
     output.push_str(&format!("{pad}<{name}\n"));
     let attr_pad = format!("{pad}{INDENT}");
-    for attr in tag.attributes {
+    for attr in attributes {
         output.push_str(&attr_pad);
         output.push_str(&format_attribute(attr));
         output.push('\n');
     }
-    output.push_str(&format!("{pad}{tail}\n"));
+    output.push_str(&format!("{pad}>\n"));
 }
 
 const BLOCK_ELEMENTS: &[&str] = &[
@@ -151,15 +143,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
     let (depth, output) = ctx;
     let pad = INDENT.repeat(depth);
     if RAW_TEXT_ELEMENTS.contains(&name.to_lowercase().as_str()) {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: false,
-            },
-            &pad,
-            output,
-        );
+        emit_open_tag(name, attributes, &pad, output);
         for child in children {
             if let Node::Text(s) = child {
                 let trimmed = s.trim_start_matches('\n').trim_end();
@@ -178,15 +162,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
         }
         output.push_str(&format!("{pad}</{name}>\n"));
     } else if children.is_empty() && is_void_element(name) {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: true,
-            },
-            &pad,
-            output,
-        );
+        emit_open_tag(name, attributes, &pad, output);
     } else if children.is_empty()
         || children
             .iter()
@@ -198,15 +174,7 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
             output.push_str(&inline_tag);
             output.push('\n');
         } else {
-            emit_open_tag(
-                &TagParams {
-                    name,
-                    attributes,
-                    self_closing: false,
-                },
-                &pad,
-                output,
-            );
+            emit_open_tag(name, attributes, &pad, output);
             output.push_str(&format!("{pad}</{name}>\n"));
         }
     } else if is_inline_content(children)
@@ -230,42 +198,18 @@ fn emit_element(name: &str, attributes: &[Attribute], children: &[Node], ctx: (u
                 .iter()
                 .any(|c| matches!(c, Node::Text(s) if !s.trim().is_empty()));
             if visual_len(&content_line) <= MAX_LINE_LENGTH || (!is_block_element(name) && has_text) {
-                emit_open_tag(
-                    &TagParams {
-                        name,
-                        attributes,
-                        self_closing: false,
-                    },
-                    &pad,
-                    output,
-                );
+                emit_open_tag(name, attributes, &pad, output);
                 output.push_str(&content_line);
                 output.push('\n');
                 output.push_str(&format!("{pad}</{name}>\n"));
             } else {
-                emit_open_tag(
-                    &TagParams {
-                        name,
-                        attributes,
-                        self_closing: false,
-                    },
-                    &pad,
-                    output,
-                );
+                emit_open_tag(name, attributes, &pad, output);
                 format_nodes(children, depth + 1, output);
                 output.push_str(&format!("{pad}</{name}>\n"));
             }
         }
     } else {
-        emit_open_tag(
-            &TagParams {
-                name,
-                attributes,
-                self_closing: false,
-            },
-            &pad,
-            output,
-        );
+        emit_open_tag(name, attributes, &pad, output);
         format_nodes(children, depth + 1, output);
         output.push_str(&format!("{pad}</{name}>\n"));
     }
@@ -551,7 +495,7 @@ fn render_node_inline(node: &Node) -> String {
         } => {
             if is_void_element(name) {
                 let attrs = format_attributes(attributes);
-                format!("<{name}{attrs} />")
+                format!("<{name}{attrs}>")
             } else {
                 format_inline(name, attributes, children)
             }
@@ -729,7 +673,7 @@ mod tests {
 
     #[test]
     fn self_closing_tag() {
-        assert_eq!(format_str("<br />"), "<br />\n");
+        assert_eq!(format_str("<br />"), "<br>\n");
     }
 
     #[test]

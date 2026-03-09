@@ -345,7 +345,8 @@ pub fn emit_reindented_line(formatted: &str, pad: &str, depth: &mut i32, result:
         || formatted.starts_with(": ")
         || formatted.starts_with("|| ")
         || formatted.starts_with("&& ")
-        || formatted.starts_with(". ");
+        || formatted.starts_with(". ")
+        || formatted.starts_with("->");
     let extra = i32::from(is_continuation);
     let write_depth = (*depth - leading + extra).max(0) as usize;
     let inner_pad = INDENT.repeat(write_depth);
