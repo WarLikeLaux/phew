@@ -8,6 +8,7 @@ pub mod split;
 pub mod yii;
 
 use crate::config::Config;
+use crate::parser::{ast, lexer};
 
 pub struct Formatter {
     indent: String,
@@ -20,6 +21,12 @@ impl Formatter {
             indent: cfg.indent_string(),
             max_line_length: cfg.max_line_length,
         }
+    }
+
+    pub fn format_source(&self, source: &str) -> String {
+        let tokens = lexer::tokenize(source);
+        let nodes = ast::parse(tokens);
+        self.format(&nodes)
     }
 }
 
