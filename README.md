@@ -123,13 +123,6 @@ phew --tree   views/site/index.php   # AST-дерево
 | **Trailing comma** | Да, в многострочных вызовах |
 | **EOF** | Файл заканчивается ровно одним `\n` (POSIX) |
 
-## Документация
-
-- [Быстрый старт (без глубокого погружения)](docs/quick-start.md)
-- [Как работает phew (пайплайн и диаграммы)](docs/how-it-works.md)
-- [Техническая архитектура для Rust-разработчиков](docs/rust-developer-guide.md)
-- [Гайд для PHP/Yii2-разработчиков](docs/php-developer-guide.md)
-
 ## Тестирование
 
 **49 unit-тестов** и **103 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`). Полная проверка перед коммитом:
