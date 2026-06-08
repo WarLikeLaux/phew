@@ -25,10 +25,7 @@ impl Formatter {
 
 impl Default for Formatter {
     fn default() -> Self {
-        Self {
-            indent: "    ".to_string(),
-            max_line_length: 120,
-        }
+        Self::new(&Config::default())
     }
 }
 
