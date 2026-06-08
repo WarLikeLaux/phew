@@ -37,8 +37,6 @@ struct Cli {
     init: bool,
 }
 
-/// Собирает итоговую конфигурацию: файл (`--config` или авто-поиск) поверх
-/// дефолтов, затем точечные CLI-оверрайды.
 fn resolve_config(cli: &Cli) -> anyhow::Result<Config> {
     let mut config = match &cli.config {
         Some(path) => Config::load(path)?,
@@ -64,8 +62,6 @@ fn resolve_config(cli: &Cli) -> anyhow::Result<Config> {
     Ok(config)
 }
 
-/// Записывает `.phew.toml` со значениями по умолчанию, не перезаписывая
-/// существующий файл.
 fn run_init() -> anyhow::Result<()> {
     let path = std::path::Path::new(".phew.toml");
     if path.exists() {

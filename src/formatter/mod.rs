@@ -9,8 +9,6 @@ pub mod yii;
 
 use crate::config::Config;
 
-/// Форматтер вьюх Yii: держит параметры форматирования (отступ и целевую
-/// длину строки) и предоставляет точку входа [`Formatter::format`].
 pub struct Formatter {
     indent: String,
     max_line_length: usize,

@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
-/// Стиль отступа: пробелы или табуляция.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum IndentStyle {
@@ -12,7 +11,6 @@ pub enum IndentStyle {
     Tabs,
 }
 
-/// Параметры форматирования, читаемые из `.phew.toml`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
@@ -31,7 +29,6 @@ impl Default for Config {
     }
 }
 
-/// Ошибки чтения и разбора файла конфигурации.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error("не удалось прочитать конфиг {path}: {source}")]
@@ -41,7 +38,6 @@ pub enum ConfigError {
 }
 
 impl Config {
-    /// Загружает конфигурацию из файла, расположенного по пути `path`.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
         let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read {
             path: path.to_path_buf(),
@@ -53,10 +49,6 @@ impl Config {
         })
     }
 
-    /// Ищет `.phew.toml`, поднимаясь от `start` вверх по дереву каталогов.
-    ///
-    /// Подъём останавливается на каталоге с `.git` (граница репозитория) либо на
-    /// корне файловой системы, чтобы не подхватить чужой конфиг извне проекта.
     pub fn discover(start: &Path) -> Option<PathBuf> {
         let mut dir = Some(start);
         while let Some(current) = dir {
@@ -72,7 +64,6 @@ impl Config {
         None
     }
 
-    /// Возвращает строку одного уровня отступа согласно стилю и размеру.
     pub fn indent_string(&self) -> String {
         match self.indent_style {
             IndentStyle::Spaces => " ".repeat(self.indent_size),
@@ -80,7 +71,6 @@ impl Config {
         }
     }
 
-    /// Текст файла `.phew.toml` со значениями по умолчанию для `--init`.
     pub fn default_toml() -> &'static str {
         concat!(
             "# Конфигурация phew (https://github.com/WarLikeLaux/phew)\n",
