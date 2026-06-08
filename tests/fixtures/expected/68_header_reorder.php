@@ -1,9 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 use app\models\User;
 use yii\helpers\Html;
-
-declare(strict_types=1);
 
 /**
  * @var yii\web\View $this

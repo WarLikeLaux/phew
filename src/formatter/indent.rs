@@ -682,9 +682,7 @@ impl Formatter {
                 && !is_declare
             {
                 if !deferred_lines.is_empty() {
-                    for dl in &deferred_lines {
-                        self.emit_reindented_line(dl, pad, &mut depth, &mut result);
-                    }
+                    emit_deferred_lines(self, &deferred_lines, pad, &mut depth, &mut result);
                     result.push('\n');
                     deferred_lines.clear();
                 }
@@ -737,9 +735,7 @@ impl Formatter {
 
         if !pending_docblocks.is_empty() || !pending_descriptions.is_empty() {
             if !deferred_lines.is_empty() {
-                for dl in &deferred_lines {
-                    self.emit_reindented_line(dl, pad, &mut depth, &mut result);
-                }
+                emit_deferred_lines(self, &deferred_lines, pad, &mut depth, &mut result);
                 result.push('\n');
             }
             self.flush_docblocks(
@@ -749,9 +745,7 @@ impl Formatter {
                 &mut result,
             );
         } else if !deferred_lines.is_empty() {
-            for dl in &deferred_lines {
-                self.emit_reindented_line(dl, pad, &mut depth, &mut result);
-            }
+            emit_deferred_lines(self, &deferred_lines, pad, &mut depth, &mut result);
         }
 
         let result = result.trim_end_matches('\n').to_string() + "\n";
@@ -788,4 +782,25 @@ fn sort_use_lines(code: &str) -> String {
     }
 
     result.join("\n") + "\n"
+}
+
+fn emit_deferred_lines(formatter: &Formatter, deferred: &[String], pad: &str, depth: &mut i32, result: &mut String) {
+    let mut declares = Vec::new();
+    let mut others = Vec::new();
+    for dl in deferred {
+        if dl.trim().starts_with("declare(") {
+            declares.push(dl.clone());
+        } else {
+            others.push(dl.clone());
+        }
+    }
+    for dl in &declares {
+        formatter.emit_reindented_line(dl, pad, depth, result);
+    }
+    if !declares.is_empty() && !others.is_empty() {
+        result.push('\n');
+    }
+    for dl in &others {
+        formatter.emit_reindented_line(dl, pad, depth, result);
+    }
 }
