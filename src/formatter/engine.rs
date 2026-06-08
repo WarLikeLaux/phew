@@ -2,9 +2,8 @@ use super::Formatter;
 use super::docblock::{emit_docblock_php, expand_single_line_docblock, is_docblock_only};
 use super::echo::{contains_break, is_echo_block_closer, is_echo_block_opener, is_single_echo_block};
 use super::indent::{
-    count_semicolons_outside_parens, count_top_level_semicolons, has_switch_case, is_header_php_block, is_php_block_closer,
-    is_php_block_opener,
-    is_switch_case_peer, split_header_and_opener, visual_len,
+    count_semicolons_outside_parens, count_top_level_semicolons, has_switch_case, is_header_php_block,
+    is_php_block_closer, is_php_block_opener, is_switch_case_peer, split_header_and_opener, visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
 use super::split::find_ternary_positions;
@@ -747,7 +746,8 @@ impl Formatter {
                 let trimmed = s.trim();
                 if !trimmed.is_empty() {
                     output.push_str(&format!("{pad}{trimmed}\n"));
-                } else if i > 0 && state.depth <= 1 && s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1 {
+                } else if i > 0 && state.depth <= 1 && s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1
+                {
                     output.push('\n');
                 }
             }
