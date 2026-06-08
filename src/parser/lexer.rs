@@ -6,7 +6,7 @@ pub struct Attribute {
     pub value: Option<String>,
 }
 
-const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style", "textarea"];
+const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style", "textarea", "pre"];
 
 #[derive(Debug, PartialEq)]
 pub enum Token {

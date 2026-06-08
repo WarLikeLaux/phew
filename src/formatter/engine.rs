@@ -14,10 +14,32 @@ const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
 ];
 
-const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style", "textarea"];
+const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style"];
+
+const VERBATIM_ELEMENTS: &[&str] = &["textarea", "pre"];
 
 fn is_void_element(name: &str) -> bool {
     VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
+fn is_verbatim_element(name: &str) -> bool {
+    VERBATIM_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
+fn push_raw_text_lines(s: &str, pad: &str, output: &mut String) {
+    let trimmed = s.trim_start_matches('\n').trim_end();
+    if trimmed.is_empty() {
+        return;
+    }
+    for line in trimmed.lines() {
+        if line.chars().next().is_some_and(char::is_whitespace) {
+            output.push_str(line);
+        } else {
+            output.push_str(pad);
+            output.push_str(line);
+        }
+        output.push('\n');
+    }
 }
 
 fn format_attributes(attrs: &[Attribute]) -> String {
@@ -143,30 +165,57 @@ fn format_inline(name: &str, attributes: &[Attribute], children: &[Node]) -> Str
 }
 
 impl Formatter {
+    fn emit_verbatim_element(
+        &self,
+        name: &str,
+        attributes: &[Attribute],
+        children: &[Node],
+        ctx: (usize, &mut String),
+    ) {
+        let (depth, output) = ctx;
+        let pad = self.indent.repeat(depth);
+        let attrs = format_attributes(attributes);
+        let content: String = children
+            .iter()
+            .filter_map(|c| match c {
+                Node::Text(s) => Some(s.as_str()),
+                _ => None,
+            })
+            .collect();
+        output.push_str(&format!("{pad}<{name}{attrs}>{content}</{name}>\n"));
+    }
+
+    fn emit_raw_text_element(
+        &self,
+        name: &str,
+        attributes: &[Attribute],
+        children: &[Node],
+        ctx: (usize, &mut String),
+    ) {
+        let (depth, output) = ctx;
+        let pad = self.indent.repeat(depth);
+        self.emit_open_tag(name, attributes, &pad, output);
+        for child in children {
+            if let Node::Text(s) = child {
+                push_raw_text_lines(s, &pad, output);
+            }
+        }
+        output.push_str(&format!("{pad}</{name}>\n"));
+    }
+
     fn emit_element(&self, name: &str, attributes: &[Attribute], children: &[Node], ctx: (usize, &mut String)) {
         let (depth, output) = ctx;
+        if is_verbatim_element(name) {
+            self.emit_verbatim_element(name, attributes, children, (depth, output));
+            return;
+        }
+        if RAW_TEXT_ELEMENTS.contains(&name.to_lowercase().as_str()) {
+            self.emit_raw_text_element(name, attributes, children, (depth, output));
+            return;
+        }
         let indent = &self.indent;
         let pad = indent.repeat(depth);
-        if RAW_TEXT_ELEMENTS.contains(&name.to_lowercase().as_str()) {
-            self.emit_open_tag(name, attributes, &pad, output);
-            for child in children {
-                if let Node::Text(s) = child {
-                    let trimmed = s.trim_start_matches('\n').trim_end();
-                    if !trimmed.is_empty() {
-                        for line in trimmed.lines() {
-                            if line.chars().next().is_some_and(char::is_whitespace) {
-                                output.push_str(line);
-                            } else {
-                                output.push_str(&pad);
-                                output.push_str(line);
-                            }
-                            output.push('\n');
-                        }
-                    }
-                }
-            }
-            output.push_str(&format!("{pad}</{name}>\n"));
-        } else if children.is_empty() && is_void_element(name) {
+        if children.is_empty() && is_void_element(name) {
             self.emit_open_tag(name, attributes, &pad, output);
         } else if children.is_empty()
             || children
@@ -865,5 +914,23 @@ mod tests {
             let out = format_str(input);
             assert!(!out.is_empty(), "пустой вывод для: {input}");
         }
+    }
+
+    #[test]
+    fn textarea_content_preserved_verbatim() {
+        let input = "<div> <textarea name=\"body\"><b>x</textarea> </div>";
+        let expected = "\
+<div>
+    <textarea name=\"body\"><b>x</textarea>
+</div>
+";
+        assert_eq!(format_str(input), expected);
+    }
+
+    #[test]
+    fn pre_whitespace_preserved_verbatim() {
+        let input = "<pre>\n  a\n    b\n</pre>";
+        let expected = "<pre>\n  a\n    b\n</pre>\n";
+        assert_eq!(format_str(input), expected);
     }
 }
