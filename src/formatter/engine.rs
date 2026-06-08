@@ -319,6 +319,11 @@ impl Formatter {
             let pad = indent.repeat(lvl);
             output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
             state.depth = lvl;
+        } else if trimmed == "}" && !state.switch_stack.is_empty() {
+            let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
+            let pad = indent.repeat(lvl + 1);
+            output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
+            state.depth = lvl;
         } else if contains_break(&lower) {
             let pad = indent.repeat(state.depth);
             output.push_str(&format!("{pad}<?php {formatted} ?>\n"));

@@ -196,3 +196,18 @@ fn echo_block_joins_inline_run_like_short_echo() {
     assert_eq!(once, expected);
     assert_eq!(format_str(&once), expected);
 }
+
+#[test]
+fn single_line_brace_switch_is_idempotent() {
+    let input = "<?php switch ($x) { case 1: echo \"a\"; break; default: echo \"d\"; } ?>";
+    let expected = "\
+<?php switch ($x) {
+    case 1: echo \"a\"; ?>
+        <?php break; ?>
+    <?php default: echo \"d\"; ?>
+    <?php } ?>
+";
+    let once = format_str(input);
+    assert_eq!(once, expected);
+    assert_eq!(format_str(&once), expected);
+}
