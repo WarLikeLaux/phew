@@ -1,8 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::Parser;
+use rayon::prelude::*;
+
 use phew::config::{Config, IndentStyle};
 use phew::formatter::Formatter;
+use phew::io::walker;
 use phew::parser::{ast, lexer};
 
 #[derive(Parser)]
@@ -73,7 +76,7 @@ fn run_init() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_tree(nodes: &[ast::Node], indent: usize) {
+fn render_tree(nodes: &[ast::Node], indent: usize, out: &mut String) {
     let pad = "  ".repeat(indent);
     for node in nodes {
         match node {
@@ -83,7 +86,7 @@ fn print_tree(nodes: &[ast::Node], indent: usize) {
                 children,
             } => {
                 if attributes.is_empty() {
-                    println!("{pad}<{name}>");
+                    out.push_str(&format!("{pad}<{name}>\n"));
                 } else {
                     let attrs: Vec<String> = attributes
                         .iter()
@@ -92,55 +95,60 @@ fn print_tree(nodes: &[ast::Node], indent: usize) {
                             None => a.name.clone(),
                         })
                         .collect();
-                    println!("{pad}<{name} {}>", attrs.join(" "));
+                    out.push_str(&format!("{pad}<{name} {}>\n", attrs.join(" ")));
                 }
-                print_tree(children, indent + 1);
+                render_tree(children, indent + 1, out);
             }
             ast::Node::Text(s) => {
                 let trimmed = s.trim();
                 if !trimmed.is_empty() {
-                    println!("{pad}TEXT: {trimmed:?}");
+                    out.push_str(&format!("{pad}TEXT: {trimmed:?}\n"));
                 }
             }
-            ast::Node::PhpBlock(s) => println!("{pad}PHP: <?php {s} ?>"),
-            ast::Node::PhpEcho(s) => println!("{pad}PHP: <?= {s} ?>"),
-            ast::Node::Doctype(s) => println!("{pad}DOCTYPE: {s}"),
-            ast::Node::Comment(s) => println!("{pad}COMMENT: {s}"),
+            ast::Node::PhpBlock(s) => out.push_str(&format!("{pad}PHP: <?php {s} ?>\n")),
+            ast::Node::PhpEcho(s) => out.push_str(&format!("{pad}PHP: <?= {s} ?>\n")),
+            ast::Node::Doctype(s) => out.push_str(&format!("{pad}DOCTYPE: {s}\n")),
+            ast::Node::Comment(s) => out.push_str(&format!("{pad}COMMENT: {s}\n")),
         }
     }
 }
 
-fn process_file(path: &str, cli: &Cli, formatter: &Formatter) {
+fn process_file(path: &Path, cli: &Cli, formatter: &Formatter) -> String {
+    let display = path.display();
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("Error reading {path}: {e}");
-            return;
+            eprintln!("Error reading {display}: {e}");
+            return String::new();
         }
     };
 
     let tokens = lexer::tokenize(&content);
 
     if cli.tokens {
-        println!("=== {path} ===");
+        let mut out = format!("=== {display} ===\n");
         for token in &tokens {
-            println!("{token:?}");
+            out.push_str(&format!("{token:?}\n"));
         }
-    } else if cli.tree {
-        let nodes = ast::parse(tokens);
-        println!("=== {path} ===");
-        print_tree(&nodes, 0);
-    } else {
-        let nodes = ast::parse(tokens);
-        let formatted = formatter.format(&nodes);
-        if cli.write {
-            if let Err(e) = std::fs::write(path, &formatted) {
-                eprintln!("Error writing {path}: {e}");
-            }
-        } else {
-            print!("{formatted}");
-        }
+        return out;
     }
+
+    if cli.tree {
+        let nodes = ast::parse(tokens);
+        let mut out = format!("=== {display} ===\n");
+        render_tree(&nodes, 0, &mut out);
+        return out;
+    }
+
+    let nodes = ast::parse(tokens);
+    let formatted = formatter.format(&nodes);
+    if cli.write {
+        if let Err(e) = std::fs::write(path, &formatted) {
+            eprintln!("Error writing {display}: {e}");
+        }
+        return String::new();
+    }
+    formatted
 }
 
 fn main() -> anyhow::Result<()> {
@@ -162,51 +170,16 @@ fn main() -> anyhow::Result<()> {
     let config = resolve_config(&cli)?;
     let formatter = Formatter::new(&config);
 
-    let mut files: Vec<String> = Vec::new();
-    for path in &cli.paths {
-        let meta = std::fs::metadata(path);
-        if let Ok(m) = &meta
-            && m.is_dir()
-        {
-            collect_files(path, &mut files);
-            continue;
-        }
-        files.push(path.clone());
-    }
+    let files = walker::collect_files(&cli.paths);
 
-    for path in &files {
-        process_file(path, &cli, &formatter);
+    let outputs: Vec<String> = files
+        .par_iter()
+        .map(|path| process_file(path, &cli, &formatter))
+        .collect();
+
+    for output in &outputs {
+        print!("{output}");
     }
 
     Ok(())
-}
-
-fn collect_files(dir: &str, out: &mut Vec<String>) {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("Error reading {dir}: {e}");
-            return;
-        }
-    };
-    let mut paths: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-    paths.sort_by_key(|e| e.path());
-    for entry in paths {
-        let path = entry.path();
-        let metadata = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
-
-        if metadata.is_dir() {
-            if !metadata.file_type().is_symlink() {
-                collect_files(&path.to_string_lossy(), out);
-            }
-        } else if let Some(ext) = path.extension() {
-            let ext = ext.to_string_lossy();
-            if ext == "php" || ext == "html" {
-                out.push(path.to_string_lossy().to_string());
-            }
-        }
-    }
 }
