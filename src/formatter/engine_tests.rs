@@ -169,3 +169,30 @@ fn pre_whitespace_preserved_verbatim() {
     let expected = "<pre>\n  a\n    b\n</pre>\n";
     assert_eq!(format_str(input), expected);
 }
+
+#[test]
+fn attr_literal_double_quotes_use_single_delimiter() {
+    let input = "<div data-x='{\"a\":1}'>y</div>";
+    assert_eq!(format_str(input), "<div data-x='{\"a\":1}'>y</div>\n");
+}
+
+#[test]
+fn attr_php_double_quotes_keep_double_delimiter() {
+    let input = "<a href=\"<?= \"/u\" ?>\">x</a>";
+    assert_eq!(format_str(input), "<a href=\"<?= \"/u\" ?>\">x</a>\n");
+}
+
+#[test]
+fn attr_apostrophe_keeps_double_delimiter() {
+    let input = "<div data-msg=\"it's ok\">y</div>";
+    assert_eq!(format_str(input), "<div data-msg=\"it's ok\">y</div>\n");
+}
+
+#[test]
+fn echo_block_joins_inline_run_like_short_echo() {
+    let input = "<p>Цена: <?php echo $a; ?> и <?php echo $b; ?></p>";
+    let expected = "<p>Цена: <?= $a ?> и <?= $b ?></p>\n";
+    let once = format_str(input);
+    assert_eq!(once, expected);
+    assert_eq!(format_str(&once), expected);
+}

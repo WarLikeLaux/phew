@@ -47,22 +47,40 @@ fn format_attributes(attrs: &[Attribute]) -> String {
         return String::new();
     }
 
-    let parts: Vec<String> = attrs
-        .iter()
-        .map(|a| match &a.value {
-            Some(v) => format!("{}=\"{}\"", a.name, v),
-            None => a.name.clone(),
-        })
-        .collect();
-
+    let parts: Vec<String> = attrs.iter().map(format_attribute).collect();
     format!(" {}", parts.join(" "))
 }
 
-fn format_attribute(attr: &Attribute) -> String {
-    match &attr.value {
-        Some(v) => format!("{}=\"{}\"", attr.name, v),
-        None => attr.name.clone(),
+fn has_literal_quote(value: &str, quote: char) -> bool {
+    let chars: Vec<char> = value.chars().collect();
+    let mut in_php = false;
+    let mut i = 0;
+    while i < chars.len() {
+        if !in_php && chars[i] == '<' && chars.get(i + 1) == Some(&'?') {
+            in_php = true;
+            i += 2;
+        } else if in_php && chars[i] == '?' && chars.get(i + 1) == Some(&'>') {
+            in_php = false;
+            i += 2;
+        } else if !in_php && chars[i] == quote {
+            return true;
+        } else {
+            i += 1;
+        }
     }
+    false
+}
+
+fn format_attribute(attr: &Attribute) -> String {
+    let Some(value) = &attr.value else {
+        return attr.name.clone();
+    };
+    let quote = if has_literal_quote(value, '"') && !has_literal_quote(value, '\'') {
+        '\''
+    } else {
+        '"'
+    };
+    format!("{}={quote}{value}{quote}", attr.name)
 }
 
 impl Formatter {
@@ -541,6 +559,12 @@ fn is_inline_element_node(node: &Node) -> bool {
     }
 }
 
+fn is_inline_run_start(node: &Node) -> bool {
+    matches!(node, Node::Text(_) | Node::PhpEcho(_))
+        || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
+        || is_inline_element_node(node)
+}
+
 fn render_node_inline(node: &Node) -> String {
     match node {
         Node::Text(s) => collapse_whitespace(s),
@@ -586,6 +610,10 @@ fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
                 if is_echo_block_opener(code) || is_echo_block_closer(code) {
                     break;
                 }
+                has_echo = true;
+                end += 1;
+            }
+            Node::PhpBlock(code) if is_single_echo_block(code) => {
                 has_echo = true;
                 end += 1;
             }
@@ -682,7 +710,7 @@ impl Formatter {
 
     fn emit_one(&self, nodes: &[Node], i: usize, pad: &str, ctx: (&mut PhpDepthState, &mut String)) -> usize {
         let (state, output) = ctx;
-        if matches!(&nodes[i], Node::Text(_) | Node::PhpEcho(_)) || is_inline_element_node(&nodes[i]) {
+        if is_inline_run_start(&nodes[i]) {
             if let Some(end) = collect_inline_run(nodes, i) {
                 self.emit_inline_run(&nodes[i..end], pad, state.depth, output);
                 return end;
