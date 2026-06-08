@@ -2,7 +2,8 @@ use super::Formatter;
 use super::docblock::{emit_docblock_php, expand_single_line_docblock, is_docblock_only};
 use super::echo::{contains_break, is_echo_block_closer, is_echo_block_opener, is_single_echo_block};
 use super::indent::{
-    count_semicolons_outside_parens, has_switch_case, is_header_php_block, is_php_block_closer, is_php_block_opener,
+    count_semicolons_outside_parens, count_top_level_semicolons, has_switch_case, is_header_php_block, is_php_block_closer,
+    is_php_block_opener,
     is_switch_case_peer, split_header_and_opener, visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
@@ -454,6 +455,18 @@ impl Formatter {
             output.push_str(&format!(
                 "{pad}<?php {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
             ));
+        } else if let Some(split) = self.try_split_long_line(&formatted, pad) {
+            let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
+            if lines.len() > 1 {
+                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+                for line in &lines[1..lines.len() - 1] {
+                    output.push_str(line);
+                    output.push('\n');
+                }
+                output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
+            } else if let Some(one) = lines.first() {
+                output.push_str(&format!("{pad}<?php {} ?>\n", one.trim_start()));
+            }
         } else {
             let reindented = self.reindent_php_block(code, pad);
             let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
@@ -489,7 +502,7 @@ impl Formatter {
             emit_docblock_php(code, pad, output);
             return;
         }
-        let semicolons = count_semicolons_outside_parens(code);
+        let semicolons = count_top_level_semicolons(code);
         let is_multiline = code.contains('\n') || semicolons > 1 || has_switch_case(code);
         if is_multiline && has_switch_case(code) {
             self.emit_php_switch_block(code, state, output);

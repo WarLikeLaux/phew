@@ -567,6 +567,36 @@ pub fn count_semicolons_outside_parens(code: &str) -> usize {
     count
 }
 
+pub fn count_top_level_semicolons(code: &str) -> usize {
+    let mut count = 0;
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut str_char = '"';
+    let chars: Vec<char> = code.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if in_str {
+            if c == '\\' {
+                i += 1;
+            } else if c == str_char {
+                in_str = false;
+            }
+        } else if c == '\'' || c == '"' {
+            in_str = true;
+            str_char = c;
+        } else if matches!(c, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(c, ')' | ']' | '}') {
+            depth -= 1;
+        } else if c == ';' && depth <= 0 {
+            count += 1;
+        }
+        i += 1;
+    }
+    count
+}
+
 impl Formatter {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn reindent_php_block(&self, code: &str, pad: &str) -> String {

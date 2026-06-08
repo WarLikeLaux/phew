@@ -221,3 +221,12 @@ fn leading_blank_lines_are_stripped() {
 fn whitespace_only_input_yields_empty() {
     assert_eq!(format_str("\n\n"), "");
 }
+
+#[test]
+fn closure_in_assignment_array_is_idempotent() {
+    let input = "<?php $c = [\"x\" => function ($m) { return $m->status; }, \"header\" => [\"alpha\" => $m->attribute, \"beta\" => $m->other, \"gamma\" => $m->more]]; ?>";
+    let once = format_str(input);
+    assert_eq!(format_str(&once), once);
+    assert!(once.contains("function ($m) { return $m->status; },"));
+    assert!(once.lines().count() > 5);
+}
