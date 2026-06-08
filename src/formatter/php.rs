@@ -1,5 +1,5 @@
 const PHP_KEYWORDS: &[&str] = &[
-    "if", "elseif", "else", "foreach", "for", "while", "switch", "catch", "match",
+    "if", "elseif", "else", "foreach", "for", "while", "switch", "catch", "match", "fn", "function",
 ];
 
 pub fn format_php_code(code: &str) -> String {

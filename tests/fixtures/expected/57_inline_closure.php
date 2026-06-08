@@ -50,7 +50,7 @@ use yii\helpers\Html;
         ],
         [
             'label' => 'Status',
-            'value' => fn($model) => StatusCircleWidget::widget(['product' => $model]),
+            'value' => fn ($model) => StatusCircleWidget::widget(['product' => $model]),
         ],
     ],
 ]) ?>
