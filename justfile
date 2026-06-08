@@ -45,10 +45,6 @@ fixtures:
 clean:
     cargo clean
 
-# git diff с разбиением на части по лимиту символов
-d chars="15000":
-    ./bin/diff-all {{chars}}
-
 # git diff --staged
 dc:
     git diff --staged

@@ -1,4 +1,8 @@
+use std::path::PathBuf;
+
 use clap::Parser;
+use phew::config::{Config, IndentStyle};
+use phew::formatter::Formatter;
 use phew::parser::{ast, lexer};
 
 #[derive(Parser)]
@@ -16,6 +20,57 @@ struct Cli {
 
     #[arg(long, help = "Show AST tree")]
     tree: bool,
+
+    #[arg(long, value_name = "PATH", help = "Path to a .phew.toml config file")]
+    config: Option<PathBuf>,
+
+    #[arg(long, value_name = "N", help = "Override target line length")]
+    line_length: Option<usize>,
+
+    #[arg(long, value_enum, help = "Override indent style")]
+    indent_style: Option<IndentStyle>,
+
+    #[arg(long, value_name = "N", help = "Override indent size (spaces)")]
+    indent_size: Option<usize>,
+
+    #[arg(long, help = "Write a default .phew.toml to the current directory")]
+    init: bool,
+}
+
+fn resolve_config(cli: &Cli) -> anyhow::Result<Config> {
+    let mut config = match &cli.config {
+        Some(path) => Config::load(path)?,
+        None => {
+            let cwd = std::env::current_dir()?;
+            match Config::discover(&cwd) {
+                Some(path) => Config::load(&path)?,
+                None => Config::default(),
+            }
+        }
+    };
+
+    if let Some(style) = cli.indent_style {
+        config.indent_style = style;
+    }
+    if let Some(size) = cli.indent_size {
+        config.indent_size = size;
+    }
+    if let Some(len) = cli.line_length {
+        config.max_line_length = len;
+    }
+
+    Ok(config)
+}
+
+fn run_init() -> anyhow::Result<()> {
+    let path = std::path::Path::new(".phew.toml");
+    if path.exists() {
+        println!(".phew.toml уже существует — оставлен без изменений");
+        return Ok(());
+    }
+    std::fs::write(path, Config::default_toml())?;
+    println!("Создан .phew.toml со значениями по умолчанию");
+    Ok(())
 }
 
 fn print_tree(nodes: &[ast::Node], indent: usize) {
@@ -55,7 +110,7 @@ fn print_tree(nodes: &[ast::Node], indent: usize) {
     }
 }
 
-fn process_file(path: &str, cli: &Cli) {
+fn process_file(path: &str, cli: &Cli, formatter: &Formatter) {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
@@ -77,7 +132,7 @@ fn process_file(path: &str, cli: &Cli) {
         print_tree(&nodes, 0);
     } else {
         let nodes = ast::parse(tokens);
-        let formatted = phew::formatter::engine::format(&nodes);
+        let formatted = formatter.format(&nodes);
         if cli.write {
             if let Err(e) = std::fs::write(path, &formatted) {
                 eprintln!("Error writing {path}: {e}");
@@ -88,13 +143,24 @@ fn process_file(path: &str, cli: &Cli) {
     }
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::panic::set_hook(Box::new(|_| {}));
+    }
+
     let cli = Cli::parse();
+
+    if cli.init {
+        return run_init();
+    }
 
     if cli.paths.is_empty() {
         println!("phew v{}", env!("CARGO_PKG_VERSION"));
-        return;
+        return Ok(());
     }
+
+    let config = resolve_config(&cli)?;
+    let formatter = Formatter::new(&config);
 
     let mut files: Vec<String> = Vec::new();
     for path in &cli.paths {
@@ -109,8 +175,10 @@ fn main() {
     }
 
     for path in &files {
-        process_file(path, &cli);
+        process_file(path, &cli, &formatter);
     }
+
+    Ok(())
 }
 
 fn collect_files(dir: &str, out: &mut Vec<String>) {
