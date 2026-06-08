@@ -1,4 +1,4 @@
-use super::indent::emit_reindented_line;
+use super::Formatter;
 
 fn normalize_var_body(body: &str) -> String {
     if !body.starts_with("@var ") {
@@ -74,14 +74,16 @@ pub fn merge_descriptions_and_vars(descriptions: &[String], vars: &[String]) -> 
     all_bodies
 }
 
-pub fn flush_docblocks(bodies: &[String], pad: &str, depth: &mut i32, result: &mut String) {
-    let merged = if bodies.len() == 1 {
-        format!("/**\n * {}\n */", bodies[0])
-    } else {
-        merge_docblock_bodies(bodies)
-    };
-    for doc_line in merged.lines() {
-        emit_reindented_line(doc_line, pad, depth, result);
+impl Formatter {
+    pub(crate) fn flush_docblocks(&self, bodies: &[String], pad: &str, depth: &mut i32, result: &mut String) {
+        let merged = if bodies.len() == 1 {
+            format!("/**\n * {}\n */", bodies[0])
+        } else {
+            merge_docblock_bodies(bodies)
+        };
+        for doc_line in merged.lines() {
+            self.emit_reindented_line(doc_line, pad, depth, result);
+        }
     }
 }
 
