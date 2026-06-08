@@ -2,12 +2,6 @@ use super::Formatter;
 use super::indent::visual_len;
 use super::php::{split_by_args, split_by_commas};
 
-/// Переводит индекс в `Vec<char>` в байтовый offset исходной строки.
-///
-/// Сканеры ниже индексируют срез `&[char]`, но результат используется для
-/// нарезки исходного `&str`, которая работает по байтам. На многобайтовых
-/// символах (кириллица и пр.) символьный индекс не равен байтовому — без
-/// перевода это даёт неверный срез или панику «not a char boundary».
 fn byte_offset(chars: &[char], char_index: usize) -> usize {
     chars[..char_index].iter().map(|c| c.len_utf8()).sum()
 }

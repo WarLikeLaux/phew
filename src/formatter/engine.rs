@@ -631,8 +631,6 @@ impl Formatter {
         }
     }
 
-    /// Форматирует один top-level узел (с учётом inline-склейки и слияния
-    /// header-блоков) и возвращает индекс следующего необработанного узла.
     fn emit_one(&self, nodes: &[Node], i: usize, pad: &str, ctx: (&mut PhpDepthState, &mut String)) -> usize {
         let (state, output) = ctx;
         if matches!(&nodes[i], Node::Text(_) | Node::PhpEcho(_)) || is_inline_element_node(&nodes[i]) {
@@ -675,9 +673,6 @@ impl Formatter {
         i + 1
     }
 
-    /// Аварийный вывод узла без форматирования — используется, когда форматирование
-    /// узла паникует. Сохраняет исходное содержимое, чтобы не потерять и не
-    /// испортить данные. Дочерние узлы выводятся рекурсивно тем же способом.
     fn render_node_raw(&self, node: &Node, pad: &str, output: &mut String) {
         match node {
             Node::Text(s) => {
