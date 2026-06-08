@@ -10,12 +10,7 @@
 | 0.4 | String-aware лексер/engine, uppercase и short PHP-теги, textarea RCDATA, echo в скобках, header + `if`, `registerJs/registerCss` |
 | 0.5 | Слияние docblock, сортировка `use`, PSR-12 порядок, декомпозиция `engine.rs` на модули |
 | 0.6.x | Дедуп/сортировка `use`, нормализация `@var`, brace/comma breaks, вложенные массивы, inline run grouping, `visual_len` для кириллицы, spaceship, method chaining |
-
-## В работе
-
-### 0.7.0 — Конфиг
-
-- `.phew.toml`: первая версия файла конфигурации.
+| 0.7 | Конфиг `.phew.toml` |
 
 ## План
 
