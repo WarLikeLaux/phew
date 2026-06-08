@@ -734,7 +734,7 @@ impl Formatter {
                 let trimmed = s.trim();
                 if !trimmed.is_empty() {
                     output.push_str(&format!("{pad}{trimmed}\n"));
-                } else if state.depth <= 1 && s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1 {
+                } else if i > 0 && state.depth <= 1 && s.contains('\n') && s.chars().filter(|&c| c == '\n').count() > 1 {
                     output.push('\n');
                 }
             }

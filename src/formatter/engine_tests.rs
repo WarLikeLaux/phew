@@ -211,3 +211,13 @@ fn single_line_brace_switch_is_idempotent() {
     assert_eq!(once, expected);
     assert_eq!(format_str(&once), expected);
 }
+
+#[test]
+fn leading_blank_lines_are_stripped() {
+    assert_eq!(format_str("\n\n<p>x</p>"), "<p>x</p>\n");
+}
+
+#[test]
+fn whitespace_only_input_yields_empty() {
+    assert_eq!(format_str("\n\n"), "");
+}
