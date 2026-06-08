@@ -17,7 +17,7 @@
 
 <p align="center">
   <b>🔍 Lexer + AST parser</b> • <b>🎨 HTML + PHP formatting</b> • <b>🔀 Smart line splitting</b><br>
-  <b>🏗 Yii 2 widgets</b> • <b>📁 Recursive directory walk</b> • <b>⚙️ CLI: fix / tokens / tree</b>
+  <b>🏗 Yii 2 widgets</b> • <b>📁 Recursive directory walk</b> • <b>⚙️ CLI: -w / --tokens / --tree</b>
 </p>
 
 </div>
@@ -68,7 +68,7 @@ phew -w views/ && git add views/
 
 ```bash
 phew --tokens views/site/index.php   # токены лексера
-phew --tree   views/site/index.php   # AST-дерево
+phew --tree views/site/index.php     # AST-дерево
 ```
 
 ## Пример
