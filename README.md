@@ -26,9 +26,9 @@
 
 ## Зачем
 
-View-файлы Yii 2 — это `.php` с HTML, PHP-вставками, виджетами и альтернативным синтаксисом (`foreach(): ... endforeach;`) вперемешку. Готовые форматтеры с этим не справляются: **Prettier** и **HTMLBeautifier** ломаются на `<?php`, **PHP CS Fixer** не видит HTML и пропускает view-файлы, **Blade Formatter** заточен под Laravel, а **PhpStorm**/**Intelephense** живут только внутри IDE — из консоли, CI или pre-commit хука их не вызвать.
+View-файлы Yii 2 - это `.php` с HTML, PHP-вставками, виджетами и альтернативным синтаксисом (`foreach(): ... endforeach;`) вперемешку. Готовые форматтеры с этим не справляются: **Prettier** и **HTMLBeautifier** ломаются на `<?php`, **PHP CS Fixer** не видит HTML и пропускает view-файлы, **Blade Formatter** заточен под Laravel, а **PhpStorm**/**Intelephense** живут только внутри IDE - из консоли, CI или pre-commit хука их не вызвать.
 
-**phew** — один CLI-инструмент, который понимает и HTML, и PHP в контексте друг друга.
+**phew** - один CLI-инструмент, который понимает и HTML, и PHP в контексте друг друга.
 
 ## Установка
 
