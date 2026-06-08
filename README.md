@@ -45,8 +45,21 @@ phew views/site/index.php
 # Перезаписать файл на месте
 phew -w views/site/index.php
 
-# Отформатировать всю директорию рекурсивно (.php и .html)
+# Отформатировать всю директорию рекурсивно (.php и .html), обход и форматирование параллельны
 phew -w views/
+
+# Прочитать буфер из stdin и вывести отформатированный в stdout (для редактора по пайпу)
+cat views/site/index.php | phew -
+```
+
+### CI и предпросмотр
+
+```bash
+# Режим для CI: ничего не пишет, выходит с кодом ≠0, если файлы не отформатированы
+phew --check views/
+
+# Показать, что изменилось бы, без записи (unified diff)
+phew --diff views/
 ```
 
 ### Интеграция в проект
@@ -61,7 +74,7 @@ phew -w views/ widgets/ && git add -u
 
 ```sh
 #!/bin/sh
-phew -w views/ && git add views/
+phew --check views/ || { echo "Запусти: phew -w views/"; exit 1; }
 ```
 
 Отладочные режимы:
@@ -70,6 +83,8 @@ phew -w views/ && git add views/
 phew --tokens views/site/index.php   # токены лексера
 phew --tree views/site/index.php     # AST-дерево
 ```
+
+Режимы `--write`, `--check`, `--diff`, `--tokens`, `--tree` взаимоисключающие.
 
 ## Конфигурация
 
@@ -140,7 +155,8 @@ phew --indent-size 2 views/
 - ✅ Inline- и void-элементы, группировка текста + `<?=` на одной строке
 - ✅ Header-блоки: PSR-12 порядок `declare → use → docblock`, сортировка и дедуп `use`, нормализация `@var`, слияние docblock
 - ✅ PHP внутри HTML-атрибутов с вложенными кавычками (`href="<?= "..." ?>"`)
-- ✅ Рекурсивный обход директорий (`.php`, `.html`), идемпотентность, POSIX EOF
+- ✅ Параллельный рекурсивный обход директорий (`.php`, `.html`), идемпотентность, POSIX EOF
+- ✅ Режимы для CI и редакторов: `--check` (exit-код), `--diff` (предпросмотр), stdin → stdout (`phew -`)
 
 ## Политика форматирования
 
