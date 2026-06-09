@@ -8,7 +8,8 @@ use super::indent::{
 use super::normalize::normalize_statements;
 use super::php::format_php_code;
 use super::scan::{
-    count_semicolons_outside_parens, count_top_level_semicolons, find_ternary_positions, has_expandable_closure,
+    contains_outside_strings, count_semicolons_outside_parens, count_top_level_semicolons, find_ternary_positions,
+    has_expandable_closure,
 };
 
 #[derive(Clone)]
@@ -104,8 +105,8 @@ impl Formatter {
         } else {
             self.emit_multiline_php_inline(code, pad, output);
         }
-        let has_widget_begin = code.contains("::begin(");
-        let has_widget_end = code.contains("::end(");
+        let has_widget_begin = contains_outside_strings(code, "::begin(");
+        let has_widget_end = contains_outside_strings(code, "::end(");
         if has_widget_begin || has_widget_end || !is_header {
             if has_widget_end {
                 *depth = depth.saturating_sub(1);

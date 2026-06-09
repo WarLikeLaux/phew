@@ -19,7 +19,7 @@ pub fn has_switch_case(code: &str) -> bool {
 
 pub fn is_php_block_opener(code: &str) -> bool {
     let trimmed = code.trim();
-    trimmed.ends_with(':') || trimmed.ends_with('{') || trimmed.contains("::begin(")
+    trimmed.ends_with(':') || trimmed.ends_with('{') || contains_outside_strings(trimmed, "::begin(")
 }
 
 pub fn is_php_block_closer(code: &str) -> bool {
@@ -35,7 +35,7 @@ pub fn is_php_block_closer(code: &str) -> bool {
         || contains_outside_strings(&lower, "break;")
         || lower.starts_with("case ")
         || lower.starts_with("default:")
-        || lower.contains("::end(")
+        || contains_outside_strings(&lower, "::end(")
 }
 
 pub fn is_switch_case_peer(code: &str) -> bool {

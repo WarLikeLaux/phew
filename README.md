@@ -81,7 +81,7 @@ phew --check views/ || { echo "Запусти: phew -w views/"; exit 1; }
 На больших проектах проверяйте только staged-файлы, чтобы не блокировать коммит из-за чужого кода в соседних файлах:
 
 ```sh
-git diff --cached --name-only --diff-filter=d | grep '\.php$' | xargs -r phew --check
+git diff --cached --name-only -z --diff-filter=d | grep -zE '\.php$' | xargs -0 -r phew --check
 ```
 
 Отладочные режимы:
