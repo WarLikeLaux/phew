@@ -87,6 +87,7 @@ fn leaf_fragments() -> impl Strategy<Value = String> {
         Just("<input type=\"text\" name=\"field\">".to_owned()),
         Just("<!-- a note -->".to_owned()),
         Just("<?= match ($status) { 'a' => 'active', 'b' => 'blocked', default => 'unknown' } ?>".to_owned()),
+        Just("<?php switch ($status) { case 1: echo 'active'; break; default: echo 'unknown'; } ?>".to_owned()),
         Just(
             "<?php $label = match ($model->type) { 'book' => Yii::t('app', 'ui.book'), 'article' => Yii::t('app', 'ui.article'), 'review' => Yii::t('app', 'ui.review'), default => Yii::t('app', 'ui.unknown') }; ?>"
                 .to_owned(),

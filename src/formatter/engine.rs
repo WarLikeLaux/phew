@@ -294,6 +294,34 @@ struct PhpDepthState {
     switch_stack: Vec<usize>,
 }
 
+fn is_self_contained_brace_switch(code: &str) -> bool {
+    let trimmed = code.trim();
+    if !trimmed.to_lowercase().starts_with("switch") || !trimmed.ends_with('}') {
+        return false;
+    }
+    let chars: Vec<char> = trimmed.chars().collect();
+    let mut braces = 0i32;
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < chars.len() && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if ch == '{' {
+            braces += 1;
+        } else if ch == '}' {
+            braces -= 1;
+        }
+        i += 1;
+    }
+    braces == 0
+}
+
 impl Formatter {
     fn emit_switch_stmt(&self, trimmed: &str, state: &mut PhpDepthState, output: &mut String) {
         let indent = &self.indent;
@@ -503,7 +531,7 @@ impl Formatter {
         }
         let semicolons = count_top_level_semicolons(code);
         let is_multiline = code.contains('\n') || semicolons > 1 || has_switch_case(code);
-        if is_multiline && has_switch_case(code) {
+        if is_multiline && has_switch_case(code) && !is_self_contained_brace_switch(code) {
             self.emit_php_switch_block(code, state, output);
         } else if is_multiline {
             self.emit_multiline_php(code, pad, &mut state.depth, output);
