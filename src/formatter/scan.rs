@@ -343,6 +343,16 @@ pub fn find_closure_body(code: &str) -> Option<(usize, usize)> {
             }
             let mut j = i + 8;
             while j < len && chars[j] != '{' {
+                if chars[j] == '\'' || chars[j] == '"' {
+                    let quote = chars[j];
+                    j += 1;
+                    while j < len && chars[j] != quote {
+                        if chars[j] == '\\' {
+                            j += 1;
+                        }
+                        j += 1;
+                    }
+                }
                 j += 1;
             }
             if j < len {

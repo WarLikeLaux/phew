@@ -89,18 +89,9 @@ fn try_consume_php_attr(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Att
     if lookahead.peek() != Some(&'?') {
         return None;
     }
-    let mut php_buf = String::from("<?");
+    let mut php_buf = String::from("<");
     chars.next();
-    chars.next();
-    while let Some(&c) = chars.peek() {
-        php_buf.push(c);
-        chars.next();
-        if c == '?' && chars.peek() == Some(&'>') {
-            php_buf.push('>');
-            chars.next();
-            break;
-        }
-    }
+    consume_php_segment(chars, &mut php_buf);
     Some(Attribute {
         name: php_buf,
         value: None,

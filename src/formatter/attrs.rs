@@ -38,8 +38,18 @@ fn find_php_close_tag(s: &str) -> Option<usize> {
     let mut i = 0;
     let mut in_single = false;
     let mut in_double = false;
+    let mut in_block_comment = false;
     while i + 1 < bytes.len() {
         let b = bytes[i];
+        if in_block_comment {
+            if b == b'*' && bytes[i + 1] == b'/' {
+                in_block_comment = false;
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
         if (in_single || in_double) && b == b'\\' {
             i += 2;
             continue;
@@ -47,6 +57,11 @@ fn find_php_close_tag(s: &str) -> Option<usize> {
         match b {
             b'\'' if !in_double => in_single = !in_single,
             b'"' if !in_single => in_double = !in_double,
+            b'/' if !in_single && !in_double && bytes[i + 1] == b'*' => {
+                in_block_comment = true;
+                i += 2;
+                continue;
+            }
             b'?' if !in_single && !in_double && bytes[i + 1] == b'>' => return Some(i),
             _ => {}
         }

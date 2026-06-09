@@ -260,6 +260,9 @@ impl Formatter {
         } else {
             output.push_str(&format!("{pad}<?php\n"));
             output.push_str(&reindented);
+            if !reindented.ends_with('\n') {
+                output.push('\n');
+            }
             output.push_str(&format!("{pad}?>\n"));
         }
     }
