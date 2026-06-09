@@ -47,3 +47,16 @@ fn split_concat_expression() {
         vec!["'a'".to_string(), "$b".to_string(), "'c'".to_string()]
     );
 }
+
+#[test]
+fn keyword_spacing_skips_keyword_named_callables() {
+    assert_format_cases(&[
+        ("$fn($user)", "$fn($user)"),
+        ("$match($x)", "$match($x)"),
+        ("$obj->fn($x)", "$obj->fn($x)"),
+        ("Filter::if($x)", "Filter::if($x)"),
+        ("my_if($x)", "my_if($x)"),
+        ("fn($x) => $x", "fn ($x) => $x"),
+        ("match($x) { default => 1 }", "match ($x) { default => 1 }"),
+    ]);
+}

@@ -172,7 +172,10 @@ pub(crate) fn normalize_statements(code: &str) -> String {
             result.push('\n');
         }
         if ch == ',' && brace_depth > 0 && paren_depth <= 0 && bracket_depth <= 0 && !next_is_nl {
-            result.push('\n');
+            let line_start = result.rfind('\n').map_or(0, |p| p + 1);
+            if !result[line_start..].trim_start().starts_with("use ") {
+                result.push('\n');
+            }
         }
         i += 1;
     }

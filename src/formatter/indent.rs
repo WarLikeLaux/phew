@@ -48,14 +48,37 @@ pub fn is_header_php_block(code: &str) -> bool {
     if code.trim_start().starts_with("/**") && !is_php_block_opener(code) {
         return true;
     }
-    let has_by_line = code.lines().any(|line| {
-        let t = line.trim();
-        t.starts_with("use ") || t.starts_with("declare(")
-    });
-    if has_by_line {
-        return true;
+    code.lines().any(|line| line.trim().starts_with("declare(")) || has_use_import(code)
+}
+
+fn has_use_import(code: &str) -> bool {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if ch == 'u' && chars[i + 1..].starts_with(&['s', 'e', ' ']) {
+            let bounded = i == 0 || !matches!(chars[i - 1], c if c.is_alphanumeric() || c == '_' || c == '$');
+            let target = chars[i + 4..].iter().find(|c| !c.is_whitespace());
+            let is_import = matches!(target, Some(c) if c.is_alphabetic() || *c == '\\' || *c == '_');
+            if bounded && is_import {
+                return true;
+            }
+        }
+        i += 1;
     }
-    code.contains(" use ") || code.contains(";use ") || code.starts_with("use ")
+    false
 }
 
 pub fn split_header_and_opener(code: &str) -> Option<(String, String)> {

@@ -45,18 +45,62 @@ fn decl_kind(header: &str) -> Option<DeclKind> {
     }
 }
 
-fn skip_leading_docblock(code: &str) -> &str {
-    let trimmed = code.trim_start();
-    if let Some(rest) = trimmed.strip_prefix("/*")
-        && let Some(end) = rest.find("*/")
-    {
-        return rest[end + 2..].trim_start();
+fn attribute_end(code: &str) -> Option<usize> {
+    let rest = code.strip_prefix("#[")?;
+    let chars: Vec<char> = rest.chars().collect();
+    let mut depth = 1i32;
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < chars.len() && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if ch == '[' {
+            depth += 1;
+        } else if ch == ']' {
+            depth -= 1;
+            if depth == 0 {
+                let consumed: usize = chars[..=i].iter().map(|c| c.len_utf8()).sum();
+                return Some(2 + consumed);
+            }
+        }
+        i += 1;
     }
-    trimmed
+    None
+}
+
+fn skip_leading_trivia(code: &str) -> &str {
+    let mut rest = code.trim_start();
+    loop {
+        if let Some(after) = rest.strip_prefix("/*") {
+            let Some(end) = after.find("*/") else {
+                return rest;
+            };
+            rest = after[end + 2..].trim_start();
+            continue;
+        }
+        if let Some(end) = attribute_end(rest) {
+            rest = rest[end..].trim_start();
+            continue;
+        }
+        if rest.starts_with("use ") || rest.starts_with("declare(") {
+            let Some(end) = rest.find(';') else {
+                return rest;
+            };
+            rest = rest[end + 1..].trim_start();
+            continue;
+        }
+        return rest;
+    }
 }
 
 pub(crate) fn is_declaration_block(code: &str) -> bool {
-    decl_kind(skip_leading_docblock(code)).is_some()
+    decl_kind(skip_leading_trivia(code)).is_some()
 }
 
 struct Frame {
@@ -80,6 +124,19 @@ struct Decl<'a> {
 
 fn is_docblock_start(line: &str) -> bool {
     line.starts_with("/*")
+}
+
+fn split_attribute_lines(line: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut rest = line;
+    while let Some(end) = attribute_end(rest) {
+        parts.push(rest[..end].trim_end());
+        rest = rest[end..].trim_start();
+    }
+    if !rest.is_empty() {
+        parts.push(rest);
+    }
+    if parts.is_empty() { vec![line] } else { parts }
 }
 
 fn parse_declaration<'a>(lines: &[&'a str], i: usize) -> Option<Decl<'a>> {
@@ -203,7 +260,12 @@ fn emit_docblock(lines: &[&str], start: usize, out: &mut Vec<String>) -> usize {
 }
 
 pub(crate) fn apply_psr12_declarations(code: &str) -> String {
-    let lines: Vec<&str> = code.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let lines: Vec<&str> = code
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .flat_map(split_attribute_lines)
+        .collect();
     let mut out: Vec<String> = Vec::new();
     let mut frames: Vec<Frame> = Vec::new();
     let mut i = 0;
@@ -214,6 +276,15 @@ pub(crate) fn apply_psr12_declarations(code: &str) -> String {
         if class_level && is_docblock_start(line) {
             start_doc_member(&mut frames, &mut out);
             i = emit_docblock(&lines, i, &mut out);
+            continue;
+        }
+
+        if line.starts_with("#[") && attribute_end(line) == Some(line.len()) {
+            if class_level {
+                start_doc_member(&mut frames, &mut out);
+            }
+            out.push(line.to_string());
+            i += 1;
             continue;
         }
 

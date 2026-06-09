@@ -30,6 +30,7 @@ impl Formatter {
     }
 
     pub fn format_source(&self, source: &str) -> String {
+        let source = source.strip_prefix('\u{FEFF}').unwrap_or(source);
         let tokens = lexer::tokenize(source);
         let nodes = ast::parse(tokens);
         self.format(&nodes)

@@ -73,3 +73,34 @@ fn control_flow_inside_method_stays_kr() {
         "class C\n{\npublic function run()\n{\nif ($x) {\nreturn 1;\n}\n}\n}"
     );
 }
+
+#[test]
+fn detects_declaration_behind_attributes_and_imports() {
+    assert!(is_declaration_block(
+        "#[\\Attribute]\nclass FilterForm extends Model {\n}"
+    ));
+    assert!(is_declaration_block(
+        "use yii\\base\\Model;\n#[\\Attribute]\nclass FilterForm extends Model {\n}"
+    ));
+    assert!(is_declaration_block(
+        "#[Route('/users', methods: ['GET'])]\nfunction show() {\n}"
+    ));
+    assert!(!is_declaration_block("use yii\\helpers\\Html;\n$this->title = 'x';"));
+}
+
+#[test]
+fn attribute_class_gets_allman_brace() {
+    let normalized =
+        "#[\\Attribute]\nclass C {\n#[Required]\npublic string $q = '';\npublic function r() {\nreturn 1;\n}\n}";
+    let out = apply_psr12_declarations(normalized);
+    assert_eq!(
+        out,
+        "#[\\Attribute]\nclass C\n{\n#[Required]\npublic string $q = '';\n\npublic function r()\n{\nreturn 1;\n}\n}"
+    );
+}
+
+#[test]
+fn inline_attribute_moves_to_own_line() {
+    let out = apply_psr12_declarations("#[Attr] class C {\npublic function r() {\nreturn 1;\n}\n}");
+    assert!(out.starts_with("#[Attr]\nclass C\n{"), "got: {out}");
+}

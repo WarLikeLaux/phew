@@ -465,6 +465,10 @@ pub fn find_array_arrow(arg: &str) -> Option<(usize, usize)> {
     Some((i, arrow_pos))
 }
 
+pub(crate) fn contains_heredoc(code: &str) -> bool {
+    code.contains('\n') && contains_outside_strings(code, "<<<")
+}
+
 pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
     let bytes = code.as_bytes();
     let needle_bytes = needle.as_bytes();

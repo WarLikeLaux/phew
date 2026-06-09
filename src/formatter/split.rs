@@ -92,7 +92,10 @@ impl Formatter {
 
             if let Some(array_inner) = inner.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
                 let items = split_by_commas(array_inner);
-                if items.len() > 1 || items.iter().any(|it| has_expandable_closure(it)) {
+                let single_too_long = items.len() == 1
+                    && visual_len(base_pad) + visual_len(&self.indent) + visual_len(&items[0]) + 1
+                        > self.max_line_length;
+                if items.len() > 1 || single_too_long || items.iter().any(|it| has_expandable_closure(it)) {
                     let prefix: String = chars[..=open_pos].iter().collect();
                     let suffix: String = chars[close_pos..].iter().collect();
                     let new_prefix = format!("{prefix}[");
