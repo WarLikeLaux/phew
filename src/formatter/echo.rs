@@ -57,7 +57,7 @@ impl Formatter {
         let chain_pad = format!("{pad}{}", self.indent);
         let mut result = format!("{pad}<?= {}{}", parts[0], parts[1]);
         for part in &parts[2..] {
-            let part_line_len = chain_pad.len() + part.len();
+            let part_line_len = visual_len(&chain_pad) + visual_len(part);
             if part_line_len > self.max_line_length {
                 if let Some(split) = self.try_split_long_line(part, &chain_pad) {
                     let split_content = split.trim_start().trim_end_matches('\n');
@@ -141,7 +141,7 @@ impl Formatter {
     }
 
     fn format_echo_arg(&self, arg: &str, inner_pad: &str) -> String {
-        let line_len = inner_pad.len() + arg.len() + 1;
+        let line_len = visual_len(inner_pad) + visual_len(arg) + 1;
         if line_len > self.max_line_length {
             if let Some(expanded) = self.expand_nested_array(arg, inner_pad) {
                 return expanded;

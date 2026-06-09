@@ -10,7 +10,7 @@ use super::scan::{
 
 impl Formatter {
     pub(crate) fn append_ternary_value(&self, result: &mut String, marker: char, value: &str, line_pad: &str) {
-        let single_len = line_pad.len() + 2 + value.len();
+        let single_len = visual_len(line_pad) + 2 + visual_len(value);
         if single_len <= self.max_line_length {
             result.push_str(&format!("{line_pad}{marker} {value}\n"));
             return;
@@ -291,7 +291,7 @@ impl Formatter {
     }
 
     fn format_split_arg(&self, arg: &str, inner_pad: &str) -> String {
-        let line_len = inner_pad.len() + arg.len() + 1;
+        let line_len = visual_len(inner_pad) + visual_len(arg) + 1;
         if line_len > self.max_line_length {
             if let Some(expanded) = self.expand_nested_array(arg, inner_pad) {
                 return expanded;
@@ -444,7 +444,7 @@ impl Formatter {
         }
         let item = &items[0];
         let nested_pad = format!("{pad}{}", self.indent);
-        let item_line_len = nested_pad.len() + item.len() + 1;
+        let item_line_len = visual_len(&nested_pad) + visual_len(item) + 1;
         if item_line_len <= self.max_line_length && !has_expandable_closure(item) {
             return None;
         }
@@ -466,7 +466,7 @@ impl Formatter {
     }
 
     fn format_bare_array_item(&self, item: &str, nested_pad: &str) -> String {
-        let item_line_len = nested_pad.len() + item.len() + 1;
+        let item_line_len = visual_len(nested_pad) + visual_len(item) + 1;
         if item_line_len > self.max_line_length
             && let Some(expanded) = self.expand_nested_array(item, nested_pad)
         {
@@ -510,7 +510,7 @@ impl Formatter {
         let deeper_pad = format!("{pad}{}", self.indent);
         let mut result = format!("{pad}[\n");
         for sub in &sub_items {
-            let sub_line_len = deeper_pad.len() + sub.len() + 1;
+            let sub_line_len = visual_len(&deeper_pad) + visual_len(sub) + 1;
             if sub_line_len > self.max_line_length {
                 if let Some(expanded) = self.expand_nested_array(sub, &deeper_pad) {
                     result.push_str(&expanded);
@@ -556,7 +556,7 @@ impl Formatter {
         }
         let mut result = format!("{pad}{header} {{\n");
         for s in &body_stmts {
-            let line_len = inner_pad.len() + s.len();
+            let line_len = visual_len(&inner_pad) + visual_len(s);
             if line_len > self.max_line_length {
                 if let Some(split) = self.try_split_long_line(s, &inner_pad) {
                     result.push_str(&split);
@@ -636,7 +636,7 @@ impl Formatter {
                 result.push_str(&expanded);
                 continue;
             }
-            let line_len = body_pad.len() + stmt.len();
+            let line_len = visual_len(&body_pad) + visual_len(stmt);
             if line_len > self.max_line_length {
                 if let Some(split) = self.try_split_long_line(stmt, &body_pad) {
                     result.push_str(&split);
