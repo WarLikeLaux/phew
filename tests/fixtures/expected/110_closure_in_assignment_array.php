@@ -2,7 +2,9 @@
     'id',
     [
         'attribute' => 'status',
-        'value' => function ($model) { return $model->getStatusLabel(); },
+        'value' => function ($model) {
+            return $model->getStatusLabel();
+        },
     ],
     [
         'label' => 'Действия',

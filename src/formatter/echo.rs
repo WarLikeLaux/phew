@@ -1,7 +1,7 @@
 use super::Formatter;
 use super::indent::{contains_outside_strings, visual_len};
 use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
-use super::split::find_ternary_positions;
+use super::split::{find_ternary_positions, has_expandable_closure};
 
 pub fn is_single_echo_block(code: &str) -> bool {
     let trimmed = code.trim();
@@ -66,7 +66,7 @@ impl Formatter {
         let combined = format!("{formatted} ?>");
         let single = format!("{pad}<?= {combined}");
 
-        if visual_len(&single) <= self.max_line_length {
+        if visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted) {
             return format!("{single}\n");
         }
 
@@ -106,6 +106,10 @@ impl Formatter {
                     }
                 }
                 if let Some(expanded) = self.expand_bare_array(arg, &inner_pad) {
+                    result.push_str(&expanded);
+                    continue;
+                }
+                if let Some(expanded) = self.expand_closure_element(arg, &inner_pad) {
                     result.push_str(&expanded);
                     continue;
                 }

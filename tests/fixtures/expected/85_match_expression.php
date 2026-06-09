@@ -3,7 +3,7 @@
     'inactive' => Yii::t('app', 'ui.inactive'),
     'pending' => Yii::t('app', 'ui.pending'),
     'archived' => Yii::t('app', 'ui.archived'),
-    default => Yii::t('app', 'ui.unknown')
+    default => Yii::t('app', 'ui.unknown'),
 }; ?>
 <div class="status">
     <span

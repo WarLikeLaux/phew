@@ -6,7 +6,7 @@ use super::indent::{
     is_php_block_closer, is_php_block_opener, is_switch_case_peer, split_header_and_opener, visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
-use super::split::find_ternary_positions;
+use super::split::{find_ternary_positions, has_expandable_closure};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
@@ -472,7 +472,8 @@ impl Formatter {
         }
         let single = format!("{pad}<?php {formatted} ?>");
         let is_alt_syntax_opener = code.trim().ends_with(':');
-        if visual_len(&single) <= self.max_line_length || is_alt_syntax_opener {
+        if (visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted)) || is_alt_syntax_opener
+        {
             output.push_str(&format!("{single}\n"));
             if is_php_block_opener(code) {
                 *depth += 1;

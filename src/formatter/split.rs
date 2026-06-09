@@ -110,7 +110,7 @@ impl Formatter {
     }
 
     pub(crate) fn try_split_long_line(&self, formatted: &str, base_pad: &str) -> Option<String> {
-        if visual_len(base_pad) + visual_len(formatted) <= self.max_line_length {
+        if visual_len(base_pad) + visual_len(formatted) <= self.max_line_length && !has_expandable_closure(formatted) {
             return None;
         }
 
@@ -150,7 +150,7 @@ impl Formatter {
 
             if let Some(array_inner) = inner.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
                 let items = split_by_commas(array_inner);
-                if items.len() > 1 {
+                if items.len() > 1 || items.iter().any(|it| has_expandable_closure(it)) {
                     let prefix: String = chars[..=open_pos].iter().collect();
                     let suffix: String = chars[close_pos..].iter().collect();
                     let new_prefix = format!("{prefix}[");
@@ -298,13 +298,17 @@ impl Formatter {
             return format!("{pad}{item},\n");
         }
 
+        if let Some(expanded) = self.expand_inline_closure(item, pad) {
+            return expanded;
+        }
+
         if let Some(arrow_pos) = find_top_level_fat_arrow(item) {
             let key = item[..arrow_pos + 2].trim_end();
             let value = item[arrow_pos + 2..].trim_start();
             if value.starts_with('[') && value.ends_with(']') {
                 let inner = &value[1..value.len() - 1];
                 let sub_items = split_by_commas(inner);
-                if sub_items.len() > 1 {
+                if sub_items.len() > 1 || sub_items.iter().any(|s| has_expandable_closure(s)) {
                     let nested_pad = format!("{pad}{indent}");
                     let mut result = format!("{pad}{key} [\n");
                     for sub in &sub_items {
@@ -341,6 +345,7 @@ impl Formatter {
         let first = items[0].trim();
         let should_expand = items.len() > 1
             || first.starts_with('[')
+            || items.iter().any(|it| has_expandable_closure(it))
             || visual_len(pad) + visual_len(&self.indent) + visual_len(first) + 1 > self.max_line_length;
         if !should_expand {
             return None;
@@ -386,6 +391,7 @@ impl Formatter {
         let first = items[0].trim();
         let should_expand = items.len() > 1
             || first.starts_with('[')
+            || items.iter().any(|it| has_expandable_closure(it))
             || visual_len(base_pad) + visual_len(lhs) + 2 + visual_len(array_part) > self.max_line_length;
         if !should_expand {
             return None;
@@ -445,6 +451,10 @@ impl Formatter {
                 }
             }
             if let Some(expanded) = self.expand_bare_array(arg, &inner_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(expanded) = self.expand_closure_element(arg, &inner_pad) {
                 result.push_str(&expanded);
                 continue;
             }
@@ -652,9 +662,15 @@ impl Formatter {
                 let item = &items[0];
                 let nested_pad = format!("{pad}{indent}");
                 let item_line_len = nested_pad.len() + item.len() + 1;
-                if item_line_len > self.max_line_length {
+                if item_line_len > self.max_line_length || has_expandable_closure(item) {
                     let mut result = format!("{pad}[\n");
-                    if let Some(split) = self.try_split_long_line(item, &nested_pad) {
+                    if let Some(expanded) = self.expand_nested_array(item, &nested_pad) {
+                        result.push_str(&expanded);
+                    } else if let Some(expanded) = self.expand_bare_sub_array(item, &nested_pad) {
+                        result.push_str(&expanded);
+                    } else if let Some(expanded) = self.expand_inline_closure(item, &nested_pad) {
+                        result.push_str(&expanded);
+                    } else if let Some(split) = self.try_split_long_line(item, &nested_pad) {
                         let trimmed = split.trim_end_matches('\n');
                         result.push_str(trimmed);
                         result.push_str(",\n");
@@ -684,11 +700,19 @@ impl Formatter {
                     let deeper_pad = format!("{nested_pad}{indent}");
                     result.push_str(&format!("{nested_pad}[\n"));
                     for sub in &sub_items {
+                        if let Some(expanded) = self.expand_inline_closure(sub, &deeper_pad) {
+                            result.push_str(&expanded);
+                            continue;
+                        }
                         result.push_str(&format!("{deeper_pad}{sub},\n"));
                     }
                     result.push_str(&format!("{nested_pad}],\n"));
                     continue;
                 }
+            }
+            if let Some(expanded) = self.expand_closure_element(item, &nested_pad) {
+                result.push_str(&expanded);
+                continue;
             }
             result.push_str(&format!("{nested_pad}{item},\n"));
         }
@@ -702,7 +726,7 @@ impl Formatter {
         }
         let sub_inner = &item[1..item.len() - 1];
         let sub_items = split_by_commas(sub_inner);
-        if sub_items.len() <= 1 {
+        if sub_items.len() <= 1 && !sub_items.iter().any(|s| has_expandable_closure(s)) {
             return None;
         }
         let deeper_pad = format!("{pad}{}", self.indent);
@@ -725,10 +749,25 @@ impl Formatter {
                     continue;
                 }
             }
+            if let Some(expanded) = self.expand_inline_closure(sub, &deeper_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
             result.push_str(&format!("{deeper_pad}{sub},\n"));
         }
         result.push_str(&format!("{pad}],\n"));
         Some(result)
+    }
+}
+
+pub fn has_expandable_closure(code: &str) -> bool {
+    match find_closure_body(code) {
+        Some((open, close)) => code
+            .chars()
+            .skip(open + 1)
+            .take(close - open - 1)
+            .any(|c| !c.is_whitespace()),
+        None => false,
     }
 }
 
@@ -737,6 +776,18 @@ pub fn find_closure_body(code: &str) -> Option<(usize, usize)> {
     let len = chars.len();
     let mut i = 0;
     while i < len {
+        if chars[i] == '\'' || chars[i] == '"' {
+            let quote = chars[i];
+            i += 1;
+            while i < len && chars[i] != quote {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
         if chars[i] == 'f'
             && i + 8 < len
             && chars[i + 1] == 'u'
@@ -921,20 +972,27 @@ impl Formatter {
         let suffix = suffix.trim();
         let inner_pad = format!("{pad}{}", self.indent);
         let mut result = format!("{pad}{header} {{\n");
-        for (idx, arm) in arms.iter().enumerate() {
-            let comma = if idx == arms.len() - 1 { "" } else { "," };
-            if visual_len(&inner_pad) + visual_len(arm) + comma.len() > self.max_line_length
+        for arm in &arms {
+            if visual_len(&inner_pad) + visual_len(arm) + 1 > self.max_line_length
                 && let Some(split) = self.try_split_long_line(arm, &inner_pad)
             {
                 result.push_str(split.trim_end_matches('\n'));
-                result.push_str(comma);
-                result.push('\n');
+                result.push_str(",\n");
                 continue;
             }
-            result.push_str(&format!("{inner_pad}{arm}{comma}\n"));
+            result.push_str(&format!("{inner_pad}{arm},\n"));
         }
         result.push_str(&format!("{pad}}}{suffix}\n"));
         Some(result)
+    }
+
+    pub(crate) fn expand_closure_element(&self, item: &str, pad: &str) -> Option<String> {
+        if !has_expandable_closure(item) {
+            return None;
+        }
+        self.expand_nested_array(item, pad)
+            .or_else(|| self.expand_bare_sub_array(item, pad))
+            .or_else(|| self.expand_inline_closure(item, pad))
     }
 
     pub(crate) fn expand_inline_closure(&self, arg: &str, pad: &str) -> Option<String> {
@@ -942,11 +1000,14 @@ impl Formatter {
         let chars: Vec<char> = arg.chars().collect();
         let body: String = chars[open_brace + 1..close_brace].iter().collect();
         let stmts = normalize_closure_body(&body);
-        if stmts.len() <= 1 {
+        if stmts.is_empty() {
             return None;
         }
         let header: String = chars[..open_brace].iter().collect();
         let header = header.trim_end();
+        if bracket_balance(header) != 0 {
+            return None;
+        }
         let after_close: String = chars[close_brace + 1..].iter().collect();
         let after_close = after_close.trim_start();
         let body_pad = format!("{pad}{}", self.indent);
@@ -1005,7 +1066,8 @@ impl Formatter {
         let inner = &value[1..value.len() - 1];
         let items = split_by_commas(inner);
         let single_nested_array = items.len() == 1 && items[0].trim_start().starts_with('[');
-        if items.len() <= 1 && !single_nested_array {
+        let has_closure = items.iter().any(|it| has_expandable_closure(it));
+        if items.len() <= 1 && !single_nested_array && !has_closure {
             return None;
         }
         let key = &arg[..skip + arrow_pos + 2];
@@ -1034,6 +1096,10 @@ impl Formatter {
             }
             if let Some(bare) = self.expand_bare_sub_array(item, &nested_pad) {
                 result.push_str(&bare);
+                continue;
+            }
+            if let Some(expanded) = self.expand_inline_closure(item, &nested_pad) {
+                result.push_str(&expanded);
                 continue;
             }
             result.push_str(&format!("{nested_pad}{item},\n"));
