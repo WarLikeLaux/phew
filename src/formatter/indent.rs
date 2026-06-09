@@ -68,6 +68,9 @@ pub fn is_switch_case_peer(code: &str) -> bool {
 }
 
 pub fn is_header_php_block(code: &str) -> bool {
+    if code.trim_start().starts_with("/**") && !is_php_block_opener(code) {
+        return true;
+    }
     let has_by_line = code.lines().any(|line| {
         let t = line.trim();
         t.starts_with("use ") || t.starts_with("declare(")
