@@ -187,14 +187,9 @@ impl Formatter {
     }
 
     fn emit_single_php_long(&self, code: &str, pad: &str, depth: &mut usize, output: &mut String) {
-        let indent = &self.indent;
         let formatted = format_php_code(code);
         if is_header_php_block(code) {
-            output.push_str(&format!("{pad}<?php\n"));
-            let reindented = self.reindent_php_block(code, pad);
-            output.push_str(&reindented);
-            output.push('\n');
-            output.push_str(&format!("{pad}?>\n"));
+            self.emit_php_header_block(code, pad, output);
             return;
         }
         if let Some(docblock) = expand_single_line_docblock(code) {
@@ -215,7 +210,7 @@ impl Formatter {
             let condition = formatted[..q_pos].trim_end();
             let true_val = formatted[q_pos + 1..c_pos].trim();
             let false_val = formatted[c_pos + 1..].trim();
-            let inner_pad = format!("{pad}{indent}");
+            let inner_pad = format!("{pad}{}", self.indent);
             output.push_str(&format!(
                 "{pad}<?php {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
             ));
@@ -224,34 +219,44 @@ impl Formatter {
             .or_else(|| self.expand_braced_value(&formatted, pad))
         {
             let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
-            if lines.len() > 1 {
-                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
-                for line in &lines[1..lines.len() - 1] {
-                    output.push_str(line);
-                    output.push('\n');
-                }
-                output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
-            } else if let Some(one) = lines.first() {
-                output.push_str(&format!("{pad}<?php {} ?>\n", one.trim_start()));
-            }
+            self.emit_php_lines(&lines, pad, output);
         } else {
-            let reindented = self.reindent_php_block(code, pad);
-            let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
-            if lines.len() > 1 {
-                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
-                for line in &lines[1..lines.len() - 1] {
-                    output.push_str(line);
-                    output.push('\n');
-                }
-                output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
-            } else {
-                output.push_str(&format!("{pad}<?php\n"));
-                output.push_str(&reindented);
-                output.push_str(&format!("{pad}?>\n"));
-            }
+            self.emit_reindented_php_block(code, pad, output);
         }
         if is_php_block_opener(code) {
             *depth += 1;
+        }
+    }
+
+    fn emit_php_header_block(&self, code: &str, pad: &str, output: &mut String) {
+        output.push_str(&format!("{pad}<?php\n"));
+        output.push_str(&self.reindent_php_block(code, pad));
+        output.push('\n');
+        output.push_str(&format!("{pad}?>\n"));
+    }
+
+    fn emit_php_lines(&self, lines: &[&str], pad: &str, output: &mut String) {
+        if lines.len() > 1 {
+            output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+            for line in &lines[1..lines.len() - 1] {
+                output.push_str(line);
+                output.push('\n');
+            }
+            output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
+        } else if let Some(one) = lines.first() {
+            output.push_str(&format!("{pad}<?php {} ?>\n", one.trim_start()));
+        }
+    }
+
+    fn emit_reindented_php_block(&self, code: &str, pad: &str, output: &mut String) {
+        let reindented = self.reindent_php_block(code, pad);
+        let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() > 1 {
+            self.emit_php_lines(&lines, pad, output);
+        } else {
+            output.push_str(&format!("{pad}<?php\n"));
+            output.push_str(&reindented);
+            output.push_str(&format!("{pad}?>\n"));
         }
     }
 
