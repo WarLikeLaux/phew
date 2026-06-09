@@ -65,14 +65,9 @@ impl Formatter {
             let pad = indent.repeat(case_lvl);
             output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
             state.depth = case_lvl + 1;
-        } else if lower.starts_with("endswitch") {
+        } else if lower.starts_with("endswitch") || (trimmed == "}" && !state.switch_stack.is_empty()) {
             let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
             let pad = indent.repeat(lvl);
-            output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
-            state.depth = lvl;
-        } else if trimmed == "}" && !state.switch_stack.is_empty() {
-            let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
-            let pad = indent.repeat(lvl + 1);
             output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
             state.depth = lvl;
         } else if contains_break(&lower) {
@@ -109,11 +104,13 @@ impl Formatter {
         } else {
             self.emit_multiline_php_inline(code, pad, output);
         }
-        let has_widget_pair = code.contains("::begin(") || code.contains("::end(");
-        if has_widget_pair || !is_header {
-            if is_php_block_closer(code) && has_widget_pair {
+        let has_widget_begin = code.contains("::begin(");
+        let has_widget_end = code.contains("::end(");
+        if has_widget_begin || has_widget_end || !is_header {
+            if has_widget_end {
                 *depth = depth.saturating_sub(1);
-            } else if (has_widget_pair || !is_php_block_closer(code)) && is_php_block_opener(code) {
+            }
+            if has_widget_begin || (!is_php_block_closer(code) && is_php_block_opener(code)) {
                 *depth += 1;
             }
         }

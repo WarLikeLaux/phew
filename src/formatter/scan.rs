@@ -98,9 +98,13 @@ pub fn find_ternary_positions(code: &str) -> Option<(usize, usize)> {
                     i += 1;
                 }
             }
-            b'(' | b'[' => depth += 1,
-            b')' | b']' => depth -= 1,
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth -= 1,
             b'?' if depth == 0 && question_pos.is_none() => {
+                if i + 2 < len && bytes[i + 1] == b'-' && bytes[i + 2] == b'>' {
+                    i += 3;
+                    continue;
+                }
                 if i + 1 < len && bytes[i + 1] == b'>' {
                     i += 2;
                     continue;
