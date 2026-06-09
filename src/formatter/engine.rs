@@ -88,6 +88,44 @@ fn is_inline_content(children: &[Node]) -> bool {
     })
 }
 
+fn is_inline_flow(children: &[Node]) -> bool {
+    children.iter().any(is_inline_element_node)
+        && children.iter().all(|c| match c {
+            Node::Text(_) => true,
+            Node::Element { .. } => is_inline_element_node(c),
+            Node::PhpEcho(_) | Node::PhpBlock(_) | Node::Doctype(_) | Node::Comment(_) => false,
+        })
+}
+
+fn push_inline_token(groups: &mut Vec<Vec<usize>>, idx: usize, space_before: bool) {
+    match groups.last_mut() {
+        Some(last) if !space_before => last.push(idx),
+        _ => groups.push(vec![idx]),
+    }
+}
+
+fn inline_glue_groups(children: &[Node]) -> Vec<Vec<usize>> {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut pending_space = false;
+    for (idx, node) in children.iter().enumerate() {
+        if let Node::Text(s) = node {
+            if s.trim().is_empty() {
+                if !s.is_empty() {
+                    pending_space = true;
+                }
+                continue;
+            }
+            let space_before = pending_space || s.starts_with(char::is_whitespace);
+            push_inline_token(&mut groups, idx, space_before);
+            pending_space = s.ends_with(char::is_whitespace);
+        } else {
+            push_inline_token(&mut groups, idx, pending_space);
+            pending_space = false;
+        }
+    }
+    groups
+}
+
 fn collapse_whitespace(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut prev_ws = false;
@@ -189,10 +227,29 @@ impl Formatter {
             self.emit_empty_element(name, attributes, &pad, output);
         } else if is_inline_content(children) && fits_inline_element(name, children) {
             self.emit_inline_element(name, attributes, children, (depth, output));
+        } else if is_inline_flow(children) {
+            self.emit_open_tag(name, attributes, &pad, output);
+            self.emit_inline_flow_children(children, depth + 1, output);
+            output.push_str(&format!("{pad}</{name}>\n"));
         } else {
             self.emit_open_tag(name, attributes, &pad, output);
             self.format_nodes(children, depth + 1, output);
             output.push_str(&format!("{pad}</{name}>\n"));
+        }
+    }
+
+    fn emit_inline_flow_children(&self, children: &[Node], depth: usize, output: &mut String) {
+        let pad = self.indent.repeat(depth);
+        for group in inline_glue_groups(children) {
+            if let [single] = group.as_slice() {
+                self.format_nodes(std::slice::from_ref(&children[*single]), depth, output);
+            } else {
+                let line: String = group.iter().map(|&i| render_node_inline(&children[i])).collect();
+                let line = line.trim();
+                if !line.is_empty() {
+                    output.push_str(&format!("{pad}{line}\n"));
+                }
+            }
         }
     }
 
