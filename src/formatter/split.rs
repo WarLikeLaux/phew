@@ -1,10 +1,10 @@
 use super::Formatter;
-use super::indent::{count_leading_closers, count_top_level_semicolons, visual_len};
+use super::indent::visual_len;
 use super::php::{split_by_args, split_by_commas};
 use super::scan::{
-    array_is_list, bracket_balance, find_array_arrow, find_brace_block, find_closure_body, find_matching_close,
-    find_ternary_positions, find_top_level_assignment_equal, find_top_level_fat_arrow, has_expandable_closure,
-    normalize_closure_body, split_by_commas_with_depth,
+    array_is_list, bracket_balance, count_leading_closers, count_top_level_semicolons, find_array_arrow,
+    find_brace_block, find_closure_body, find_matching_close, find_ternary_positions, find_top_level_assignment_equal,
+    find_top_level_fat_arrow, has_expandable_closure, normalize_closure_body, split_by_commas_with_depth,
 };
 
 impl Formatter {

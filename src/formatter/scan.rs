@@ -459,6 +459,201 @@ pub fn find_array_arrow(arg: &str) -> Option<(usize, usize)> {
     Some((i, arrow_pos))
 }
 
+pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
+    let bytes = code.as_bytes();
+    let needle_bytes = needle.as_bytes();
+    let len = bytes.len();
+    let nlen = needle_bytes.len();
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == b'\'' || bytes[i] == b'"' {
+            let q = bytes[i];
+            i += 1;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+        if i + nlen <= len && &bytes[i..i + nlen] == needle_bytes {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+pub(crate) fn count_brackets(s: &str) -> (usize, usize) {
+    let mut openers = 0usize;
+    let mut closers = 0usize;
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if matches!(ch, '(' | '[' | '{') {
+            openers += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            closers += 1;
+        }
+        i += 1;
+    }
+
+    (openers, closers)
+}
+
+pub(crate) fn count_leading_closers(s: &str) -> usize {
+    s.chars().take_while(|c| matches!(c, ')' | ']' | '}')).count()
+}
+
+pub(crate) fn count_unescaped_quotes(line: &str, quote: char) -> usize {
+    let mut count = 0;
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '\\' {
+            i += 2;
+            continue;
+        }
+        if chars[i] == quote {
+            count += 1;
+        }
+        i += 1;
+    }
+    count
+}
+
+pub(crate) fn has_unclosed_string(line: &str) -> bool {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut in_str: Option<char> = None;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\\' && in_str.is_some() {
+            i += 2;
+            continue;
+        }
+        match in_str {
+            Some(q) if ch == q => in_str = None,
+            Some(_) => {}
+            None if ch == '\'' || ch == '"' => in_str = Some(ch),
+            _ => {}
+        }
+        i += 1;
+    }
+    in_str.is_some()
+}
+
+pub(crate) fn detect_open_quote(line: &str) -> Option<char> {
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    let mut in_str: Option<char> = None;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\\' && in_str.is_some() {
+            i += 2;
+            continue;
+        }
+        match in_str {
+            Some(q) if ch == q => in_str = None,
+            Some(_) => {}
+            None if ch == '\'' || ch == '"' => in_str = Some(ch),
+            _ => {}
+        }
+        i += 1;
+    }
+    in_str
+}
+
+pub(crate) fn detect_heredoc(line: &str) -> Option<String> {
+    let pos = line.find("<<<")?;
+    let after = line[pos + 3..].trim();
+    if after.is_empty() {
+        return None;
+    }
+    let marker = after.trim_matches('\'').trim_matches('"');
+    let marker = marker.trim_end_matches(',');
+    if marker.chars().all(|c| c.is_alphanumeric() || c == '_') && !marker.is_empty() {
+        Some(marker.to_string())
+    } else {
+        None
+    }
+}
+
+pub(crate) fn count_semicolons_outside_parens(code: &str) -> usize {
+    let mut count = 0;
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut str_char = '"';
+    let chars_iter: Vec<char> = code.chars().collect();
+    let mut ci = 0;
+    while ci < chars_iter.len() {
+        let c = chars_iter[ci];
+        if in_str {
+            if c == '\\' {
+                ci += 1;
+            } else if c == str_char {
+                in_str = false;
+            }
+        } else if c == '\'' || c == '"' {
+            in_str = true;
+            str_char = c;
+        } else if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            depth -= 1;
+        } else if c == ';' && depth <= 0 {
+            count += 1;
+        }
+        ci += 1;
+    }
+    count
+}
+
+pub(crate) fn count_top_level_semicolons(code: &str) -> usize {
+    let mut count = 0;
+    let mut depth = 0i32;
+    let mut in_str = false;
+    let mut str_char = '"';
+    let chars: Vec<char> = code.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if in_str {
+            if c == '\\' {
+                i += 1;
+            } else if c == str_char {
+                in_str = false;
+            }
+        } else if c == '\'' || c == '"' {
+            in_str = true;
+            str_char = c;
+        } else if matches!(c, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(c, ')' | ']' | '}') {
+            depth -= 1;
+        } else if c == ';' && depth <= 0 {
+            count += 1;
+        }
+        i += 1;
+    }
+    count
+}
+
 #[cfg(test)]
 #[path = "scan_tests.rs"]
 mod tests;

@@ -2,11 +2,13 @@ use super::Formatter;
 use super::docblock::{emit_docblock_php, expand_single_line_docblock, is_docblock_only};
 use super::echo::{contains_break, is_echo_block_closer, is_echo_block_opener, is_single_echo_block};
 use super::indent::{
-    count_semicolons_outside_parens, count_top_level_semicolons, has_switch_case, is_header_php_block,
-    is_php_block_closer, is_php_block_opener, is_switch_case_peer, split_header_and_opener, visual_len,
+    has_switch_case, is_header_php_block, is_php_block_closer, is_php_block_opener, is_switch_case_peer,
+    split_header_and_opener, visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
-use super::scan::{find_ternary_positions, has_expandable_closure};
+use super::scan::{
+    count_semicolons_outside_parens, count_top_level_semicolons, find_ternary_positions, has_expandable_closure,
+};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
