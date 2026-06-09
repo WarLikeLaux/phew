@@ -1,19 +1,17 @@
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
 
-use rayon::prelude::*;
+use ignore::{WalkBuilder, WalkState};
 
 const FORMATTABLE_EXTENSIONS: [&str; 2] = ["php", "html"];
+const PHEW_IGNORE_FILE: &str = ".phewignore";
 
 pub fn collect_files(paths: &[String]) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for path in paths {
         let target = Path::new(path);
         match std::fs::metadata(target) {
-            Ok(meta) if meta.is_dir() => {
-                let mut found = walk_dir(target);
-                found.par_sort();
-                files.extend(found);
-            }
+            Ok(meta) if meta.is_dir() => files.extend(walk_dir(target)),
             Ok(_) => files.push(target.to_path_buf()),
             Err(e) => eprintln!("Error reading metadata {}: {e}", target.display()),
         }
@@ -22,29 +20,29 @@ pub fn collect_files(paths: &[String]) -> Vec<PathBuf> {
 }
 
 fn walk_dir(dir: &Path) -> Vec<PathBuf> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(e) => {
-            eprintln!("Error reading {}: {e}", dir.display());
-            return Vec::new();
-        }
-    };
-    let children: Vec<PathBuf> = entries.filter_map(Result::ok).map(|entry| entry.path()).collect();
-    children.par_iter().flat_map(|path| classify(path)).collect()
-}
-
-fn classify(path: &Path) -> Vec<PathBuf> {
-    let metadata = match std::fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(_) => return Vec::new(),
-    };
-    if metadata.is_dir() {
-        return walk_dir(path);
-    }
-    if is_formattable(path) {
-        return vec![path.to_path_buf()];
-    }
-    Vec::new()
+    let (tx, rx) = mpsc::channel::<PathBuf>();
+    WalkBuilder::new(dir)
+        .git_global(false)
+        .git_exclude(false)
+        .require_git(false)
+        .add_custom_ignore_filename(PHEW_IGNORE_FILE)
+        .build_parallel()
+        .run(|| {
+            let tx = tx.clone();
+            Box::new(move |result| {
+                if let Ok(entry) = result
+                    && entry.file_type().is_some_and(|file_type| file_type.is_file())
+                    && is_formattable(entry.path())
+                {
+                    let _ = tx.send(entry.into_path());
+                }
+                WalkState::Continue
+            })
+        });
+    drop(tx);
+    let mut files: Vec<PathBuf> = rx.iter().collect();
+    files.sort();
+    files
 }
 
 fn is_formattable(path: &Path) -> bool {
@@ -71,9 +69,13 @@ mod tests {
         }
 
         fn touch(&self, rel: &str) {
+            self.write(rel, "");
+        }
+
+        fn write(&self, rel: &str, content: &str) {
             let path = self.root.join(rel);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, "").unwrap();
+            std::fs::write(path, content).unwrap();
         }
 
         fn arg(&self) -> String {
@@ -116,6 +118,38 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|p| p.ends_with("top.php")));
         assert!(files.iter().any(|p| p.ends_with("deep/inner/leaf.php")));
+    }
+
+    #[test]
+    fn phewignore_excludes_matching_paths() {
+        let tree = TempTree::new("phewignore");
+        tree.touch("keep.php");
+        tree.touch("vendor/dep.php");
+        tree.write(".phewignore", "vendor/\n");
+
+        let files = collect_files(&[tree.arg()]);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["keep.php"]);
+    }
+
+    #[test]
+    fn gitignore_excludes_matching_paths() {
+        let tree = TempTree::new("gitignore");
+        tree.touch("app.php");
+        tree.touch("build/gen.php");
+        tree.write(".gitignore", "build/\n");
+
+        let files = collect_files(&[tree.arg()]);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["app.php"]);
     }
 
     #[test]
