@@ -55,15 +55,7 @@ fn consume_attr_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> S
                 if look.peek() == Some(&'?') {
                     value.push(c);
                     chars.next();
-                    while let Some(&pc) = chars.peek() {
-                        value.push(pc);
-                        chars.next();
-                        if pc == '?' && chars.peek() == Some(&'>') {
-                            value.push('>');
-                            chars.next();
-                            break;
-                        }
-                    }
+                    consume_php_segment(chars, &mut value);
                     continue;
                 }
             }
@@ -362,19 +354,35 @@ fn try_consume_doctype(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Toke
     Some(Token::Doctype(buf.trim().to_string()))
 }
 
-fn consume_php_in_tag(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
-    buf.push('<');
+fn consume_php_segment(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
     buf.push('?');
     chars.next();
-    while let Some(&pc) = chars.peek() {
-        buf.push(pc);
+    let mut in_string: Option<char> = None;
+    while let Some(&c) = chars.peek() {
+        buf.push(c);
         chars.next();
-        if pc == '?' && chars.peek() == Some(&'>') {
+        if let Some(q) = in_string {
+            if c == '\\' {
+                if let Some(&esc) = chars.peek() {
+                    buf.push(esc);
+                    chars.next();
+                }
+            } else if c == q {
+                in_string = None;
+            }
+        } else if c == '\'' || c == '"' {
+            in_string = Some(c);
+        } else if c == '?' && chars.peek() == Some(&'>') {
             buf.push('>');
             chars.next();
             break;
         }
     }
+}
+
+fn consume_php_in_tag(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
+    buf.push('<');
+    consume_php_segment(chars, buf);
 }
 
 fn consume_tag_body(chars: &mut Peekable<std::str::Chars<'_>>) -> String {
