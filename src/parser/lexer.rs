@@ -176,41 +176,81 @@ fn parse_tag(tag_content: &str) -> Token {
     }
 }
 
+enum PhpScan {
+    Code,
+    Str(char),
+    LineComment,
+    BlockComment,
+}
+
+fn consume_php_code(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, buf: &mut String) -> bool {
+    let mut state = PhpScan::Code;
+    while let Some(c) = chars.next() {
+        match state {
+            PhpScan::Code => {
+                if c == '?' && chars.peek() == Some(&'>') {
+                    chars.next();
+                    return true;
+                }
+                buf.push(c);
+                state = scan_code_transition(c, chars, buf);
+            }
+            PhpScan::Str(q) => {
+                buf.push(c);
+                if c == '\\' {
+                    if let Some(esc) = chars.next() {
+                        buf.push(esc);
+                    }
+                } else if c == q {
+                    state = PhpScan::Code;
+                }
+            }
+            PhpScan::LineComment => {
+                if c == '?' && chars.peek() == Some(&'>') {
+                    chars.next();
+                    return true;
+                }
+                buf.push(c);
+                if c == '\n' {
+                    state = PhpScan::Code;
+                }
+            }
+            PhpScan::BlockComment => {
+                buf.push(c);
+                if c == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    buf.push('/');
+                    state = PhpScan::Code;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn scan_code_transition(c: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>, buf: &mut String) -> PhpScan {
+    if c == '\'' || c == '"' {
+        return PhpScan::Str(c);
+    }
+    if c == '#' && chars.peek() != Some(&'[') {
+        return PhpScan::LineComment;
+    }
+    if c == '/' && chars.peek() == Some(&'/') {
+        chars.next();
+        buf.push('/');
+        return PhpScan::LineComment;
+    }
+    if c == '/' && chars.peek() == Some(&'*') {
+        chars.next();
+        buf.push('*');
+        return PhpScan::BlockComment;
+    }
+    PhpScan::Code
+}
+
 fn consume_php_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
     let mut content = String::new();
-    let mut in_string: Option<char> = None;
-    while let Some(&c) = chars.peek() {
-        if let Some(q) = in_string {
-            content.push(c);
-            chars.next();
-            if c == '\\' {
-                if let Some(&esc) = chars.peek() {
-                    content.push(esc);
-                    chars.next();
-                }
-            } else if c == q {
-                in_string = None;
-            }
-            continue;
-        }
-        if c == '\'' || c == '"' {
-            in_string = Some(c);
-            content.push(c);
-            chars.next();
-            continue;
-        }
-        if c == '?' {
-            chars.next();
-            if chars.peek() == Some(&'>') {
-                chars.next();
-                break;
-            }
-            content.push('?');
-            continue;
-        }
-        content.push(c);
-        chars.next();
-    }
+    consume_php_code(chars, &mut content);
     let trimmed = content.trim_end().to_string();
     if trimmed.contains('\n') {
         trimmed.strip_prefix('\n').unwrap_or(&trimmed).to_string()
@@ -357,26 +397,8 @@ fn try_consume_doctype(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Toke
 fn consume_php_segment(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
     buf.push('?');
     chars.next();
-    let mut in_string: Option<char> = None;
-    while let Some(&c) = chars.peek() {
-        buf.push(c);
-        chars.next();
-        if let Some(q) = in_string {
-            if c == '\\' {
-                if let Some(&esc) = chars.peek() {
-                    buf.push(esc);
-                    chars.next();
-                }
-            } else if c == q {
-                in_string = None;
-            }
-        } else if c == '\'' || c == '"' {
-            in_string = Some(c);
-        } else if c == '?' && chars.peek() == Some(&'>') {
-            buf.push('>');
-            chars.next();
-            break;
-        }
+    if consume_php_code(chars, buf) {
+        buf.push_str("?>");
     }
 }
 
