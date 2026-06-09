@@ -2,10 +2,10 @@ use super::Formatter;
 use super::indent::visual_len;
 use super::php::split_by_args;
 use super::scan::{
-    array_is_list, bracket_balance, count_leading_closers, count_top_level_semicolons, find_array_arrow,
+    BinaryOp, array_is_list, bracket_balance, count_leading_closers, count_top_level_semicolons, find_array_arrow,
     find_brace_block, find_closure_body, find_matching_close, find_ternary_positions, find_top_level_assignment_equal,
-    find_top_level_fat_arrow, has_expandable_closure, normalize_closure_body, split_by_commas,
-    split_by_commas_with_depth,
+    find_top_level_binary_op, find_top_level_fat_arrow, has_expandable_closure, normalize_closure_body,
+    split_by_commas, split_by_commas_with_depth,
 };
 
 impl Formatter {
@@ -57,6 +57,10 @@ impl Formatter {
             return Some(result);
         }
 
+        if let Some(split) = self.split_long_by_logical(formatted, base_pad) {
+            return Some(split);
+        }
+
         if let Some((prefix, args, suffix)) = split_by_args(formatted) {
             return Some(self.build_split(&prefix, &args, &suffix, base_pad));
         }
@@ -97,6 +101,49 @@ impl Formatter {
         }
 
         None
+    }
+
+    fn split_long_by_logical(&self, formatted: &str, base_pad: &str) -> Option<String> {
+        for op in [BinaryOp::Or, BinaryOp::And, BinaryOp::Concat] {
+            let positions = find_top_level_binary_op(formatted, op);
+            if positions.is_empty() {
+                continue;
+            }
+            if let Some(split) = self.build_logical_split(formatted, base_pad, op, &positions) {
+                return Some(split);
+            }
+        }
+        None
+    }
+
+    fn build_logical_split(
+        &self,
+        formatted: &str,
+        base_pad: &str,
+        op: BinaryOp,
+        positions: &[usize],
+    ) -> Option<String> {
+        let chars: Vec<char> = formatted.chars().collect();
+        let token = op.token();
+
+        let mut operands: Vec<String> = Vec::with_capacity(positions.len() + 1);
+        let mut start = 0;
+        for &pos in positions {
+            operands.push(chars[start..pos].iter().collect::<String>().trim().to_string());
+            start = pos + op.char_len();
+        }
+        operands.push(chars[start..].iter().collect::<String>().trim().to_string());
+
+        if operands.iter().any(String::is_empty) || !logical_roundtrip_ok(formatted, &operands, token) {
+            return None;
+        }
+
+        let inner_pad = format!("{base_pad}{}", self.indent);
+        let mut result = format!("{base_pad}{}\n", operands[0]);
+        for operand in &operands[1..] {
+            result.push_str(&format!("{inner_pad}{token} {operand}\n"));
+        }
+        Some(result)
     }
 
     fn format_assignment_array_item(&self, item: &str, pad: &str) -> String {
@@ -666,4 +713,13 @@ impl Formatter {
         result.push_str(&format!("{pad}],\n"));
         Some(result)
     }
+}
+
+fn logical_roundtrip_ok(original: &str, operands: &[String], token: &str) -> bool {
+    let rebuilt = operands.join(&format!(" {token} "));
+    strip_whitespace(&rebuilt) == strip_whitespace(original)
+}
+
+fn strip_whitespace(code: &str) -> String {
+    code.chars().filter(|c| !c.is_whitespace()).collect()
 }

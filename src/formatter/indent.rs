@@ -1,6 +1,6 @@
 use super::Formatter;
 use super::docblock::{extract_docblock_body, merge_descriptions_and_vars};
-use super::normalize::{join_ternary_lines, normalize_statements};
+use super::normalize::{join_logical_lines, join_ternary_lines, normalize_statements};
 use super::php::format_php_code;
 use super::scan::{
     contains_outside_strings, count_brackets, count_leading_closers, count_unescaped_quotes, detect_heredoc,
@@ -176,7 +176,7 @@ impl Formatter {
         let code = if needs_normalize {
             normalize_statements(code)
         } else {
-            join_ternary_lines(code)
+            join_logical_lines(&join_ternary_lines(code))
         };
         let is_header = is_header_php_block(&code);
         Reindenter::new(self, pad, is_header).run(&code)

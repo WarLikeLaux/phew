@@ -250,3 +250,23 @@ pub(crate) fn join_ternary_lines(code: &str) -> String {
 
     result.join("\n")
 }
+
+pub(crate) fn join_logical_lines(code: &str) -> String {
+    let mut result: Vec<String> = Vec::new();
+    for line in code.lines() {
+        let trimmed = line.trim_start();
+        if is_logical_continuation(trimmed)
+            && let Some(last) = result.last_mut()
+        {
+            last.push(' ');
+            last.push_str(trimmed);
+            continue;
+        }
+        result.push(line.to_string());
+    }
+    result.join("\n")
+}
+
+fn is_logical_continuation(trimmed: &str) -> bool {
+    trimmed.starts_with("|| ") || trimmed.starts_with("&& ") || trimmed.starts_with(". ")
+}

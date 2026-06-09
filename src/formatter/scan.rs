@@ -191,6 +191,82 @@ fn is_assignment_equal(chars: &[char], pos: usize) -> bool {
     !is_non_assignment
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BinaryOp {
+    Or,
+    And,
+    Concat,
+}
+
+impl BinaryOp {
+    pub(crate) fn token(self) -> &'static str {
+        match self {
+            BinaryOp::Or => "||",
+            BinaryOp::And => "&&",
+            BinaryOp::Concat => ".",
+        }
+    }
+
+    pub(crate) fn char_len(self) -> usize {
+        match self {
+            BinaryOp::Or | BinaryOp::And => 2,
+            BinaryOp::Concat => 1,
+        }
+    }
+}
+
+pub(crate) fn find_top_level_binary_op(code: &str, op: BinaryOp) -> Vec<usize> {
+    let chars: Vec<char> = code.chars().collect();
+    let sigs: Vec<Sig> = PhpCursor::new(&chars).collect();
+    match op {
+        BinaryOp::Or => collect_double_char(&sigs, '|'),
+        BinaryOp::And => collect_double_char(&sigs, '&'),
+        BinaryOp::Concat => collect_concat(&sigs, &chars),
+    }
+}
+
+fn collect_double_char(sigs: &[Sig], symbol: char) -> Vec<usize> {
+    let mut positions = Vec::new();
+    let mut i = 0;
+    while i + 1 < sigs.len() {
+        let current = &sigs[i];
+        let next = &sigs[i + 1];
+        let is_operator = current.ch == symbol
+            && next.ch == symbol
+            && current.depth == 0
+            && next.depth == 0
+            && next.index == current.index + 1;
+        if is_operator {
+            positions.push(current.index);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    positions
+}
+
+fn collect_concat(sigs: &[Sig], chars: &[char]) -> Vec<usize> {
+    let mut positions = Vec::new();
+    for (i, sig) in sigs.iter().enumerate() {
+        if sig.ch != '.' || sig.depth != 0 {
+            continue;
+        }
+        let prev_is_dot = i > 0 && sigs[i - 1].ch == '.' && sigs[i - 1].index + 1 == sig.index;
+        let next_is_dot = sigs.get(i + 1).is_some_and(|n| n.ch == '.' && n.index == sig.index + 1);
+        if prev_is_dot || next_is_dot {
+            continue;
+        }
+        let prev_digit = sig.index > 0 && chars[sig.index - 1].is_ascii_digit();
+        let next_digit = chars.get(sig.index + 1).is_some_and(char::is_ascii_digit);
+        if prev_digit && next_digit {
+            continue;
+        }
+        positions.push(sig.index);
+    }
+    positions
+}
+
 pub fn split_by_commas(code: &str) -> Vec<String> {
     split_segments(code, 0, 0)
 }
