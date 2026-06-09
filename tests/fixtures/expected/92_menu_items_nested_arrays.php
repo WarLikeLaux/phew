@@ -1,4 +1,4 @@
-<?php if ($admin){
+<?php if ($admin) {
     $menuItems = [
         [
             'label' => 'SRM',
