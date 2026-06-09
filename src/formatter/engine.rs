@@ -438,6 +438,11 @@ impl Formatter {
         } else if !state.switch_stack.is_empty() && contains_break(&lower) {
             let stmt_pad = indent.repeat(state.depth);
             output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
+        } else if !state.switch_stack.is_empty() && code.trim() == "}" {
+            let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
+            let stmt_pad = indent.repeat(lvl);
+            output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
+            state.depth = lvl;
         } else if is_php_block_closer(code) {
             state.depth = state.depth.saturating_sub(1);
             let pad_less = indent.repeat(state.depth);
