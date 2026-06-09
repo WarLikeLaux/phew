@@ -1,3 +1,5 @@
+use super::scan::{find_matching_close, split_by_commas};
+
 const PHP_KEYWORDS: &[&str] = &[
     "if", "elseif", "else", "foreach", "for", "while", "switch", "catch", "match", "fn", "function",
 ];
@@ -236,9 +238,22 @@ pub fn split_by_concat(code: &str) -> Vec<String> {
 
 pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
     let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
+    let open_pos = find_call_open_paren(&chars)?;
+    let close_pos = find_matching_close(&chars, open_pos)?;
 
-    let mut open_pos = None;
+    let prefix: String = chars[..=open_pos].iter().collect();
+    let inner: String = chars[open_pos + 1..close_pos].iter().collect();
+    let suffix: String = chars[close_pos..].iter().collect();
+
+    let args = split_by_commas(&inner);
+    if args.len() <= 1 {
+        return None;
+    }
+    Some((prefix, args, suffix))
+}
+
+fn find_call_open_paren(chars: &[char]) -> Option<usize> {
+    let len = chars.len();
     let mut i = 0;
     while i < len {
         let ch = chars[i];
@@ -254,166 +269,38 @@ pub fn split_by_args(code: &str) -> Option<(String, Vec<String>, String)> {
             let prefix: String = chars[..i].iter().collect();
             let trimmed = prefix.trim_end();
             if trimmed.ends_with("fn") || trimmed.ends_with("function") {
-                let mut depth = 1i32;
-                i += 1;
-                while i < len && depth > 0 {
-                    if chars[i] == '\'' || chars[i] == '"' {
-                        let q = chars[i];
-                        i += 1;
-                        while i < len && chars[i] != q {
-                            if chars[i] == '\\' {
-                                i += 1;
-                            }
-                            i += 1;
-                        }
-                    } else if chars[i] == '(' {
-                        depth += 1;
-                    } else if chars[i] == ')' {
-                        depth -= 1;
-                    }
-                    i += 1;
-                }
+                i = skip_paren_group(chars, i + 1);
                 continue;
             }
-            open_pos = Some(i);
-            break;
+            return Some(i);
         }
         i += 1;
     }
-
-    let open_pos = open_pos?;
-
-    let mut depth = 0i32;
-    let mut close_pos = None;
-    let mut i = open_pos;
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-        } else if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-            if depth == 0 {
-                close_pos = Some(i);
-                break;
-            }
-        }
-        i += 1;
-    }
-
-    let close_pos = close_pos?;
-    let prefix: String = chars[..=open_pos].iter().collect();
-    let inner: String = chars[open_pos + 1..close_pos].iter().collect();
-    let suffix: String = chars[close_pos..].iter().collect();
-
-    let inner_chars: Vec<char> = inner.chars().collect();
-    let inner_len = inner_chars.len();
-    let mut args = Vec::new();
-    let mut current = String::new();
-    let mut d = 0i32;
-    let mut j = 0;
-
-    while j < inner_len {
-        let ch = inner_chars[j];
-        if ch == '\'' || ch == '"' {
-            current.push(ch);
-            j += 1;
-            while j < inner_len && inner_chars[j] != ch {
-                if inner_chars[j] == '\\' {
-                    current.push(inner_chars[j]);
-                    j += 1;
-                }
-                if j < inner_len {
-                    current.push(inner_chars[j]);
-                    j += 1;
-                }
-            }
-            if j < inner_len {
-                current.push(inner_chars[j]);
-                j += 1;
-            }
-            continue;
-        }
-        if matches!(ch, '(' | '[' | '{') {
-            d += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            d -= 1;
-        } else if ch == ',' && d == 0 {
-            args.push(current.trim().to_string());
-            current = String::new();
-            j += 1;
-            continue;
-        }
-        current.push(ch);
-        j += 1;
-    }
-
-    if !current.trim().is_empty() {
-        args.push(current.trim().to_string());
-    }
-
-    if args.len() <= 1 {
-        return None;
-    }
-
-    Some((prefix, args, suffix))
+    None
 }
 
-pub fn split_by_commas(code: &str) -> Vec<String> {
-    let chars: Vec<char> = code.chars().collect();
+fn skip_paren_group(chars: &[char], start: usize) -> usize {
     let len = chars.len();
-    let mut items = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0i32;
-    let mut i = 0;
-
-    while i < len {
+    let mut depth = 1i32;
+    let mut i = start;
+    while i < len && depth > 0 {
         let ch = chars[i];
         if ch == '\'' || ch == '"' {
-            current.push(ch);
             i += 1;
             while i < len && chars[i] != ch {
                 if chars[i] == '\\' {
-                    current.push(chars[i]);
                     i += 1;
                 }
-                if i < len {
-                    current.push(chars[i]);
-                    i += 1;
-                }
-            }
-            if i < len {
-                current.push(chars[i]);
                 i += 1;
             }
-            continue;
-        }
-        if matches!(ch, '(' | '[' | '{') {
+        } else if ch == '(' {
             depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
+        } else if ch == ')' {
             depth -= 1;
-        } else if ch == ',' && depth == 0 {
-            items.push(current.trim().to_string());
-            current = String::new();
-            i += 1;
-            continue;
         }
-        current.push(ch);
         i += 1;
     }
-
-    if !current.trim().is_empty() {
-        items.push(current.trim().to_string());
-    }
-
-    items
+    i
 }
 
 fn skip_string_literal(chars: &[char], start: usize, result: &mut String) -> usize {

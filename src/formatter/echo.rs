@@ -1,8 +1,9 @@
 use super::Formatter;
 use super::indent::visual_len;
-use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_commas, split_by_concat};
+use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
 use super::scan::{
     contains_outside_strings, find_array_arrow, find_matching_close, find_ternary_positions, has_expandable_closure,
+    split_by_commas,
 };
 
 const WIDGET_MARKER: &str = "::widget(";

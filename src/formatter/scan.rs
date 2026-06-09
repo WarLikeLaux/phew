@@ -1,5 +1,3 @@
-use super::php::split_by_commas;
-
 fn byte_offset(chars: &[char], char_index: usize) -> usize {
     chars[..char_index].iter().map(|c| c.len_utf8()).sum()
 }
@@ -199,6 +197,56 @@ pub(crate) fn find_top_level_assignment_equal(code: &str) -> Option<usize> {
     }
 
     None
+}
+
+pub fn split_by_commas(code: &str) -> Vec<String> {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut items = Vec::new();
+    let mut current = String::new();
+    let mut depth = 0i32;
+    let mut i = 0;
+
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            current.push(ch);
+            i += 1;
+            while i < len && chars[i] != ch {
+                if chars[i] == '\\' {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+                if i < len {
+                    current.push(chars[i]);
+                    i += 1;
+                }
+            }
+            if i < len {
+                current.push(chars[i]);
+                i += 1;
+            }
+            continue;
+        }
+        if matches!(ch, '(' | '[' | '{') {
+            depth += 1;
+        } else if matches!(ch, ')' | ']' | '}') {
+            depth -= 1;
+        } else if ch == ',' && depth == 0 {
+            items.push(current.trim().to_string());
+            current = String::new();
+            i += 1;
+            continue;
+        }
+        current.push(ch);
+        i += 1;
+    }
+
+    if !current.trim().is_empty() {
+        items.push(current.trim().to_string());
+    }
+
+    items
 }
 
 pub(crate) fn split_by_commas_with_depth(code: &str, mut depth: i32, split_depth: i32) -> Vec<String> {
