@@ -1,4 +1,5 @@
 use super::Formatter;
+use super::declaration::apply_psr12_declarations;
 use super::docblock::{extract_docblock_body, merge_descriptions_and_vars};
 use super::normalize::{join_logical_lines, join_ternary_lines, normalize_statements};
 use super::php::format_php_code;
@@ -171,6 +172,12 @@ fn split_trailing_array_item_close(line: &str) -> Option<(String, String)> {
 }
 
 impl Formatter {
+    pub(crate) fn reindent_declaration_block(&self, code: &str, pad: &str) -> String {
+        let normalized = normalize_statements(code);
+        let transformed = apply_psr12_declarations(&normalized);
+        Reindenter::new(self, pad, ReindentMode::Declaration).run(&transformed)
+    }
+
     pub(crate) fn reindent_php_block(&self, code: &str, pad: &str) -> String {
         let needs_normalize = !code.contains('\n') && (code.contains(';') || has_switch_case(code));
         let code = if needs_normalize {
@@ -178,15 +185,26 @@ impl Formatter {
         } else {
             join_logical_lines(&join_ternary_lines(code))
         };
-        let is_header = is_header_php_block(&code);
-        Reindenter::new(self, pad, is_header).run(&code)
+        let mode = if is_header_php_block(&code) {
+            ReindentMode::Header
+        } else {
+            ReindentMode::Inline
+        };
+        Reindenter::new(self, pad, mode).run(&code)
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReindentMode {
+    Header,
+    Inline,
+    Declaration,
 }
 
 struct Reindenter<'a> {
     fmt: &'a Formatter,
     pad: &'a str,
-    is_header: bool,
+    mode: ReindentMode,
     result: String,
     depth: i32,
     switch_levels: Vec<(i32, bool)>,
@@ -204,11 +222,11 @@ struct Reindenter<'a> {
 }
 
 impl<'a> Reindenter<'a> {
-    fn new(fmt: &'a Formatter, pad: &'a str, is_header: bool) -> Self {
+    fn new(fmt: &'a Formatter, pad: &'a str, mode: ReindentMode) -> Self {
         Self {
             fmt,
             pad,
-            is_header,
+            mode,
             result: String::new(),
             depth: 0,
             switch_levels: Vec::new(),
@@ -251,7 +269,7 @@ impl<'a> Reindenter<'a> {
             self.handle_blank();
             return;
         }
-        if self.first_content && !self.prev_blank && self.is_header {
+        if self.first_content && !self.prev_blank && self.mode == ReindentMode::Header {
             self.result.push('\n');
         }
         self.first_content = false;
@@ -263,7 +281,7 @@ impl<'a> Reindenter<'a> {
         if self.prev_was_declare && !is_declare && !self.prev_blank {
             self.result.push('\n');
         }
-        if self.prev_was_doc_close && !self.prev_blank {
+        if self.prev_was_doc_close && !self.prev_blank && self.mode != ReindentMode::Declaration {
             self.result.push('\n');
         }
         self.prev_blank = false;
@@ -327,7 +345,7 @@ impl<'a> Reindenter<'a> {
         let all_var = !self.docblock_bodies.is_empty() && self.docblock_bodies.iter().all(|b| b.starts_with("@var "));
         if all_var {
             self.pending_docblocks.append(&mut self.docblock_bodies);
-        } else if self.is_header {
+        } else if self.mode == ReindentMode::Header {
             self.pending_descriptions.append(&mut self.docblock_bodies);
         } else {
             self.flush_pending_docblocks();

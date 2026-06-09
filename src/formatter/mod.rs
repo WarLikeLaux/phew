@@ -1,4 +1,5 @@
 pub mod attrs;
+pub mod declaration;
 pub mod docblock;
 pub mod echo;
 pub mod engine;

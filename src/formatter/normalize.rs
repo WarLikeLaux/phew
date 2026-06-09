@@ -163,6 +163,9 @@ pub(crate) fn normalize_statements(code: &str) -> String {
             i += 1;
             continue;
         }
+        if ch == ';' {
+            in_case_label = false;
+        }
         result.push(ch);
         let next_is_nl = next.is_some_and(|c| c == '\n');
         if ch == ';' && paren_depth <= 0 && !next_is_nl {
