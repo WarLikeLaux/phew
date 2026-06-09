@@ -1,6 +1,10 @@
 <?= GridView::widget([
     'dataProvider' => $provider,
-    'columns' => ['id', 'name', 'status'],
+    'columns' => [
+        'id',
+        'name',
+        'status',
+    ],
 ]) ?>
 <?= Breadcrumbs::widget(['links' => $this->params['breadcrumbs']]) ?>
 <?= Alert::widget() ?>

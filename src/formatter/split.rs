@@ -175,6 +175,12 @@ impl Formatter {
     }
 }
 
+fn array_is_list(inner: &str) -> bool {
+    split_by_commas(inner)
+        .iter()
+        .any(|item| !item.trim().is_empty() && find_top_level_fat_arrow(item).is_none())
+}
+
 fn find_top_level_fat_arrow(code: &str) -> Option<usize> {
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
@@ -458,6 +464,10 @@ impl Formatter {
                 continue;
             }
             if let Some(expanded) = self.expand_closure_element(arg, &inner_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            if let Some(expanded) = self.expand_list_value(arg, &inner_pad) {
                 result.push_str(&expanded);
                 continue;
             }
@@ -1060,6 +1070,16 @@ pub fn find_array_arrow(arg: &str) -> Option<(usize, usize)> {
 }
 
 impl Formatter {
+    pub(crate) fn expand_list_value(&self, arg: &str, pad: &str) -> Option<String> {
+        let (skip, arrow_pos) = find_array_arrow(arg)?;
+        let value = arg[skip + arrow_pos + 2..].trim();
+        let inner = value.strip_prefix('[')?.strip_suffix(']')?;
+        if !array_is_list(inner) {
+            return None;
+        }
+        self.expand_nested_array(arg, pad)
+    }
+
     pub(crate) fn expand_nested_array(&self, arg: &str, pad: &str) -> Option<String> {
         let (skip, arrow_pos) = find_array_arrow(arg)?;
         let value = arg[skip + arrow_pos + 2..].trim();
