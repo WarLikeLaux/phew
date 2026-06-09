@@ -156,9 +156,7 @@ fn render_tree(nodes: &[ast::Node], indent: usize, out: &mut String) {
 }
 
 fn format_content(content: &str, formatter: &Formatter) -> String {
-    let tokens = lexer::tokenize(content);
-    let nodes = ast::parse(tokens);
-    formatter.format(&nodes)
+    formatter.format_source(content)
 }
 
 fn dump_tokens(label: &str, content: &str) -> String {

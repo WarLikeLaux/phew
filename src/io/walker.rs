@@ -14,7 +14,8 @@ pub fn collect_files(paths: &[String]) -> Vec<PathBuf> {
                 found.par_sort();
                 files.extend(found);
             }
-            _ => files.push(target.to_path_buf()),
+            Ok(_) => files.push(target.to_path_buf()),
+            Err(e) => eprintln!("Error reading metadata {}: {e}", target.display()),
         }
     }
     files
@@ -47,9 +48,11 @@ fn classify(path: &Path) -> Vec<PathBuf> {
 }
 
 fn is_formattable(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| FORMATTABLE_EXTENSIONS.contains(&ext))
+    path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| {
+        FORMATTABLE_EXTENSIONS
+            .iter()
+            .any(|allowed| ext.eq_ignore_ascii_case(allowed))
+    })
 }
 
 #[cfg(test)]

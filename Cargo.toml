@@ -13,8 +13,8 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 thiserror = "2"
 anyhow = "1"
-rayon = "1"
-similar = "2"
+rayon = "1.10"
+similar = "2.6"
 
 [dev-dependencies]
 pretty_assertions = "1"
