@@ -92,6 +92,28 @@ fn normalize_php_segment(seg: &str) -> String {
     }
 }
 
+fn find_php_close_tag(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    while i + 1 < bytes.len() {
+        let b = bytes[i];
+        if (in_single || in_double) && b == b'\\' {
+            i += 2;
+            continue;
+        }
+        match b {
+            b'\'' if !in_double => in_single = !in_single,
+            b'"' if !in_single => in_double = !in_double,
+            b'?' if !in_single && !in_double && bytes[i + 1] == b'>' => return Some(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
 fn normalize_attr_value(value: &str) -> String {
     if !value.contains("<?") {
         return value.to_string();
@@ -101,7 +123,7 @@ fn normalize_attr_value(value: &str) -> String {
     while let Some(start) = rest.find("<?") {
         out.push_str(&rest[..start]);
         let after = &rest[start..];
-        let Some(close) = after.find("?>") else {
+        let Some(close) = find_php_close_tag(after) else {
             out.push_str(after);
             return out;
         };
@@ -120,7 +142,7 @@ fn single_php_segment(value: &str) -> Option<(String, bool, String, String)> {
     if !is_echo && !is_php {
         return None;
     }
-    let close = after.find("?>")?;
+    let close = find_php_close_tag(after)?;
     let suffix = &after[close + 2..];
     if suffix.contains("<?") {
         return None;

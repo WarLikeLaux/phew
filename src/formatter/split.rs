@@ -176,9 +176,12 @@ impl Formatter {
 }
 
 fn array_is_list(inner: &str) -> bool {
-    split_by_commas(inner)
-        .iter()
-        .any(|item| !item.trim().is_empty() && find_top_level_fat_arrow(item).is_none())
+    let items = split_by_commas(inner);
+    !items.is_empty()
+        && items
+            .iter()
+            .filter(|item| !item.trim().is_empty())
+            .all(|item| find_top_level_fat_arrow(item).is_none())
 }
 
 fn find_top_level_fat_arrow(code: &str) -> Option<usize> {
@@ -774,14 +777,12 @@ impl Formatter {
 }
 
 pub fn has_expandable_closure(code: &str) -> bool {
-    match find_closure_body(code) {
-        Some((open, close)) => code
-            .chars()
+    find_closure_body(code).is_some_and(|(open, close)| {
+        code.chars()
             .skip(open + 1)
             .take(close - open - 1)
-            .any(|c| !c.is_whitespace()),
-        None => false,
-    }
+            .any(|c| !c.is_whitespace())
+    })
 }
 
 pub fn find_closure_body(code: &str) -> Option<(usize, usize)> {
