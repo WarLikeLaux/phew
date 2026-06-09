@@ -278,6 +278,7 @@ pub fn normalize_statements(code: &str) -> String {
     let mut paren_depth: i32 = 0;
     let mut brace_depth: i32 = 0;
     let mut bracket_depth: i32 = 0;
+    let mut in_case_label = false;
 
     while i < len {
         let ch = chars[i];
@@ -303,12 +304,22 @@ pub fn normalize_statements(code: &str) -> String {
             i += 1;
             continue;
         }
-        if paren_depth <= 0
-            && !result.ends_with('\n')
-            && !result.trim_end().is_empty()
-            && (matches_keyword_at(&chars, i, "case ") || matches_keyword_at(&chars, i, "default:"))
-        {
-            result.push('\n');
+        if paren_depth <= 0 && (matches_keyword_at(&chars, i, "case ") || matches_keyword_at(&chars, i, "default:")) {
+            if !result.ends_with('\n') && !result.trim_end().is_empty() {
+                result.push('\n');
+            }
+            in_case_label = true;
+        }
+        if in_case_label && ch == ':' && paren_depth <= 0 && bracket_depth <= 0 {
+            if next == Some(':') {
+                result.push_str("::");
+                i += 2;
+                continue;
+            }
+            result.push_str(":\n");
+            in_case_label = false;
+            i += 1;
+            continue;
         }
         result.push(ch);
         let next_is_nl = next.is_some_and(|c| c == '\n');
