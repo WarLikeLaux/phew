@@ -138,7 +138,13 @@ impl Formatter {
             }
             output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
         } else if lines.len() == 1 {
-            output.push_str(&format!("{pad}<?php {} ?>\n", lines[0].trim_start()));
+            let formatted = lines[0].trim_start();
+            if let Some(split) = self.split_inline_php(formatted, pad) {
+                let split_lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
+                self.emit_php_lines(&split_lines, pad, output);
+            } else {
+                output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
+            }
         }
     }
 
@@ -215,7 +221,7 @@ impl Formatter {
                 "{pad}<?php {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
             ));
         } else if let Some(split) = self
-            .try_split_long_line(&formatted, pad)
+            .split_inline_php(&formatted, pad)
             .or_else(|| self.expand_braced_value(&formatted, pad))
         {
             let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();

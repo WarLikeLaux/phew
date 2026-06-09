@@ -8,6 +8,8 @@ use super::scan::{
     split_by_commas, split_by_commas_with_depth,
 };
 
+const PHP_INLINE_TAG_WIDTH: usize = "<?php ".len() + " ?>".len();
+
 impl Formatter {
     pub(crate) fn append_ternary_value(&self, result: &mut String, marker: char, value: &str, line_pad: &str) {
         let single_len = visual_len(line_pad) + 2 + visual_len(value);
@@ -36,6 +38,14 @@ impl Formatter {
 
     pub(crate) fn try_split_long_line(&self, formatted: &str, base_pad: &str) -> Option<String> {
         if visual_len(base_pad) + visual_len(formatted) <= self.max_line_length && !has_expandable_closure(formatted) {
+            return None;
+        }
+        self.split_long_line(formatted, base_pad)
+    }
+
+    pub(crate) fn split_inline_php(&self, formatted: &str, base_pad: &str) -> Option<String> {
+        let inline_width = visual_len(base_pad) + PHP_INLINE_TAG_WIDTH + visual_len(formatted);
+        if inline_width <= self.max_line_length && !has_expandable_closure(formatted) {
             return None;
         }
         self.split_long_line(formatted, base_pad)

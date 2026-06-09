@@ -78,3 +78,18 @@ fn logical_split_is_idempotent() {
     let twice = fmt(&Config::default(), &once);
     assert_eq!(once, twice, "second pass changed output");
 }
+
+#[test]
+fn body_within_tag_width_window_still_splits() {
+    let input = "<?php $isVisible = $item->isEnabledNow() || $item->isHighlightedRow() || $item->isPromotedToday() || $item->isPinned(); ?>";
+    let out = fmt(&Config::default(), input);
+    assert!(
+        out.contains("\n    || "),
+        "body fits without tags but not with them, must split:\n{out}"
+    );
+    assert_eq!(
+        out,
+        fmt(&Config::default(), &out),
+        "single and multiline paths must agree (idempotent)"
+    );
+}
