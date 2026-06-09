@@ -17,6 +17,19 @@ pub fn format_php_code(code: &str) -> String {
             continue;
         }
 
+        if ch == '<' && chars.get(i + 1) == Some(&'=') && chars.get(i + 2) == Some(&'>') {
+            if !result.ends_with(' ') {
+                result.push(' ');
+            }
+            result.push_str("<=>");
+            let next = i + 3;
+            if next < len && chars[next] != ' ' {
+                result.push(' ');
+            }
+            i = next;
+            continue;
+        }
+
         if ch == '=' && i + 1 < len && chars[i + 1] == '>' && !result.ends_with('<') {
             i = format_fat_arrow(&chars, i, &mut result);
             continue;
@@ -52,6 +65,13 @@ pub fn format_php_code(code: &str) -> String {
             while i < len && chars[i] == ' ' {
                 i += 1;
             }
+            continue;
+        }
+
+        if ch == '{' && result.ends_with(')') {
+            result.push(' ');
+            result.push('{');
+            i += 1;
             continue;
         }
 

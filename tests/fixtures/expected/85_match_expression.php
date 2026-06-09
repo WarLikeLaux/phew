@@ -3,11 +3,16 @@
     'inactive' => Yii::t('app', 'ui.inactive'),
     'pending' => Yii::t('app', 'ui.pending'),
     'archived' => Yii::t('app', 'ui.archived'),
-    default => Yii::t('app', 'ui.unknown')
+    default => Yii::t('app', 'ui.unknown'),
 }; ?>
 <div class="status">
     <span
-        class="badge bg-<?= match ($model->status) { 'active' => 'success', 'inactive' => 'secondary', 'pending' => 'warning', default => 'dark' } ?>"
+        class="badge bg-<?= match ($model->status) {
+            'active' => 'success',
+            'inactive' => 'secondary',
+            'pending' => 'warning',
+            default => 'dark',
+        } ?>"
     >
         <?= $statusText ?>
     </span>

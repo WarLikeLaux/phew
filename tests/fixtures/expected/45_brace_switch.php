@@ -16,5 +16,5 @@
             <div class="step">
                 <p>Unknown</p>
             </div>
-        <?php } ?>
+    <?php } ?>
 </div>

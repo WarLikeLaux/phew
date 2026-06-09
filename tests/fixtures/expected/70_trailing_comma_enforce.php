@@ -12,5 +12,10 @@
 ) ?>
 <?= GridView::widget([
     'dataProvider' => $dataProvider,
-    'columns' => [['class' => 'yii\grid\SerialColumn'], 'id', 'name', ['class' => 'yii\grid\ActionColumn']],
+    'columns' => [
+        ['class' => 'yii\grid\SerialColumn'],
+        'id',
+        'name',
+        ['class' => 'yii\grid\ActionColumn'],
+    ],
 ]) ?>

@@ -1,19 +1,36 @@
-use std::path::PathBuf;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{ArgGroup, Parser};
+use rayon::prelude::*;
+use similar::TextDiff;
+
 use phew::config::{Config, IndentStyle};
 use phew::formatter::Formatter;
+use phew::io::walker;
 use phew::parser::{ast, lexer};
+
+const STDIN_MARKER: &str = "-";
+const STDIN_LABEL: &str = "<stdin>";
+const DIFF_CONTEXT: usize = 3;
 
 #[derive(Parser)]
 #[command(name = "phew")]
 #[command(about = "Fast HTML + PHP formatter for Yii 2 view files")]
+#[command(group(ArgGroup::new("mode").args(["write", "check", "diff", "tokens", "tree"])))]
 struct Cli {
-    #[arg(help = "Files or directories to format")]
+    #[arg(help = "Files or directories to format ('-' reads from stdin)")]
     paths: Vec<String>,
 
     #[arg(short, long, help = "Write result back to file")]
     write: bool,
+
+    #[arg(long, help = "Exit non-zero if any file is not formatted; write nothing")]
+    check: bool,
+
+    #[arg(long, help = "Show what would change without writing")]
+    diff: bool,
 
     #[arg(long, help = "Show tokens instead of formatting")]
     tokens: bool,
@@ -35,6 +52,34 @@ struct Cli {
 
     #[arg(long, help = "Write a default .phew.toml to the current directory")]
     init: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Mode {
+    Format,
+    Write,
+    Check,
+    Diff,
+    Tokens,
+    Tree,
+}
+
+impl Mode {
+    fn resolve(cli: &Cli) -> Self {
+        if cli.write {
+            Self::Write
+        } else if cli.check {
+            Self::Check
+        } else if cli.diff {
+            Self::Diff
+        } else if cli.tokens {
+            Self::Tokens
+        } else if cli.tree {
+            Self::Tree
+        } else {
+            Self::Format
+        }
+    }
 }
 
 fn resolve_config(cli: &Cli) -> anyhow::Result<Config> {
@@ -73,7 +118,7 @@ fn run_init() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_tree(nodes: &[ast::Node], indent: usize) {
+fn render_tree(nodes: &[ast::Node], indent: usize, out: &mut String) {
     let pad = "  ".repeat(indent);
     for node in nodes {
         match node {
@@ -83,7 +128,7 @@ fn print_tree(nodes: &[ast::Node], indent: usize) {
                 children,
             } => {
                 if attributes.is_empty() {
-                    println!("{pad}<{name}>");
+                    out.push_str(&format!("{pad}<{name}>\n"));
                 } else {
                     let attrs: Vec<String> = attributes
                         .iter()
@@ -92,121 +137,207 @@ fn print_tree(nodes: &[ast::Node], indent: usize) {
                             None => a.name.clone(),
                         })
                         .collect();
-                    println!("{pad}<{name} {}>", attrs.join(" "));
+                    out.push_str(&format!("{pad}<{name} {}>\n", attrs.join(" ")));
                 }
-                print_tree(children, indent + 1);
+                render_tree(children, indent + 1, out);
             }
             ast::Node::Text(s) => {
                 let trimmed = s.trim();
                 if !trimmed.is_empty() {
-                    println!("{pad}TEXT: {trimmed:?}");
+                    out.push_str(&format!("{pad}TEXT: {trimmed:?}\n"));
                 }
             }
-            ast::Node::PhpBlock(s) => println!("{pad}PHP: <?php {s} ?>"),
-            ast::Node::PhpEcho(s) => println!("{pad}PHP: <?= {s} ?>"),
-            ast::Node::Doctype(s) => println!("{pad}DOCTYPE: {s}"),
-            ast::Node::Comment(s) => println!("{pad}COMMENT: {s}"),
+            ast::Node::PhpBlock(s) => out.push_str(&format!("{pad}PHP: <?php {s} ?>\n")),
+            ast::Node::PhpEcho(s) => out.push_str(&format!("{pad}PHP: <?= {s} ?>\n")),
+            ast::Node::Doctype(s) => out.push_str(&format!("{pad}DOCTYPE: {s}\n")),
+            ast::Node::Comment(s) => out.push_str(&format!("{pad}COMMENT: {s}\n")),
         }
     }
 }
 
-fn process_file(path: &str, cli: &Cli, formatter: &Formatter) {
-    let content = match std::fs::read_to_string(path) {
-        Ok(c) => c,
+fn format_content(content: &str, formatter: &Formatter) -> String {
+    formatter.format_source(content)
+}
+
+fn dump_tokens(label: &str, content: &str) -> String {
+    let tokens = lexer::tokenize(content);
+    let mut out = format!("=== {label} ===\n");
+    for token in &tokens {
+        out.push_str(&format!("{token:?}\n"));
+    }
+    out
+}
+
+fn dump_tree(label: &str, content: &str) -> String {
+    let tokens = lexer::tokenize(content);
+    let nodes = ast::parse(tokens);
+    let mut out = format!("=== {label} ===\n");
+    render_tree(&nodes, 0, &mut out);
+    out
+}
+
+fn diff_text(label: &str, content: &str, formatter: &Formatter) -> String {
+    let formatted = format_content(content, formatter);
+    if formatted == content {
+        return String::new();
+    }
+    let diff = TextDiff::from_lines(content, &formatted);
+    let mut unified = diff.unified_diff();
+    unified
+        .context_radius(DIFF_CONTEXT)
+        .header(&format!("a/{label}"), &format!("b/{label}"));
+    format!("{unified}")
+}
+
+fn load(path: &Path) -> Option<String> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => Some(content),
         Err(e) => {
-            eprintln!("Error reading {path}: {e}");
+            eprintln!("Error reading {}: {e}", path.display());
+            None
+        }
+    }
+}
+
+fn label(path: &Path) -> String {
+    path.display().to_string()
+}
+
+fn print_pass<F>(files: &[PathBuf], render: F) -> ExitCode
+where
+    F: Fn(&Path, &str) -> String + Sync,
+{
+    let outputs: Vec<String> = files
+        .par_iter()
+        .map(|path| match load(path) {
+            Some(content) => render(path, &content),
+            None => String::new(),
+        })
+        .collect();
+
+    let mut stdout = std::io::stdout().lock();
+    for output in &outputs {
+        let _ = stdout.write_all(output.as_bytes());
+    }
+    ExitCode::SUCCESS
+}
+
+fn write_pass(files: &[PathBuf], formatter: &Formatter) -> ExitCode {
+    files.par_iter().for_each(|path| {
+        let Some(content) = load(path) else {
             return;
+        };
+        let formatted = format_content(&content, formatter);
+        if formatted != content
+            && let Err(e) = std::fs::write(path, &formatted)
+        {
+            eprintln!("Error writing {}: {e}", path.display());
+        }
+    });
+    ExitCode::SUCCESS
+}
+
+fn check_pass(files: &[PathBuf], formatter: &Formatter) -> ExitCode {
+    let unformatted: Vec<&PathBuf> = files
+        .par_iter()
+        .filter(|path| match load(path) {
+            Some(content) => format_content(&content, formatter) != content,
+            None => false,
+        })
+        .collect();
+
+    if unformatted.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+
+    let mut stderr = std::io::stderr().lock();
+    for path in &unformatted {
+        let _ = writeln!(stderr, "не отформатирован: {}", path.display());
+    }
+    let _ = writeln!(stderr, "Требуют форматирования: {}", unformatted.len());
+    ExitCode::FAILURE
+}
+
+fn run_stdin(mode: Mode, formatter: &Formatter) -> anyhow::Result<ExitCode> {
+    let mut content = String::new();
+    std::io::stdin().read_to_string(&mut content)?;
+
+    let exit = match mode {
+        Mode::Format | Mode::Write => {
+            print!("{}", format_content(&content, formatter));
+            ExitCode::SUCCESS
+        }
+        Mode::Tokens => {
+            print!("{}", dump_tokens(STDIN_LABEL, &content));
+            ExitCode::SUCCESS
+        }
+        Mode::Tree => {
+            print!("{}", dump_tree(STDIN_LABEL, &content));
+            ExitCode::SUCCESS
+        }
+        Mode::Diff => {
+            print!("{}", diff_text(STDIN_LABEL, &content, formatter));
+            ExitCode::SUCCESS
+        }
+        Mode::Check => {
+            if format_content(&content, formatter) == content {
+                ExitCode::SUCCESS
+            } else {
+                eprintln!("stdin не отформатирован");
+                ExitCode::FAILURE
+            }
         }
     };
-
-    let tokens = lexer::tokenize(&content);
-
-    if cli.tokens {
-        println!("=== {path} ===");
-        for token in &tokens {
-            println!("{token:?}");
-        }
-    } else if cli.tree {
-        let nodes = ast::parse(tokens);
-        println!("=== {path} ===");
-        print_tree(&nodes, 0);
-    } else {
-        let nodes = ast::parse(tokens);
-        let formatted = formatter.format(&nodes);
-        if cli.write {
-            if let Err(e) = std::fs::write(path, &formatted) {
-                eprintln!("Error writing {path}: {e}");
-            }
-        } else {
-            print!("{formatted}");
-        }
-    }
+    Ok(exit)
 }
 
-fn main() -> anyhow::Result<()> {
-    if std::env::var_os("RUST_BACKTRACE").is_none() {
-        std::panic::set_hook(Box::new(|_| {}));
-    }
+fn is_stdin(paths: &[String]) -> bool {
+    paths.len() == 1 && paths[0] == STDIN_MARKER
+}
 
+fn run() -> anyhow::Result<ExitCode> {
     let cli = Cli::parse();
 
     if cli.init {
-        return run_init();
+        run_init()?;
+        return Ok(ExitCode::SUCCESS);
     }
 
     if cli.paths.is_empty() {
         println!("phew v{}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
+        return Ok(ExitCode::SUCCESS);
     }
 
     let config = resolve_config(&cli)?;
     let formatter = Formatter::new(&config);
+    let mode = Mode::resolve(&cli);
 
-    let mut files: Vec<String> = Vec::new();
-    for path in &cli.paths {
-        let meta = std::fs::metadata(path);
-        if let Ok(m) = &meta
-            && m.is_dir()
-        {
-            collect_files(path, &mut files);
-            continue;
-        }
-        files.push(path.clone());
+    if is_stdin(&cli.paths) {
+        return run_stdin(mode, &formatter);
     }
 
-    for path in &files {
-        process_file(path, &cli, &formatter);
-    }
-
-    Ok(())
+    let files = walker::collect_files(&cli.paths);
+    let exit = match mode {
+        Mode::Format => print_pass(&files, |_, content| format_content(content, &formatter)),
+        Mode::Tokens => print_pass(&files, |path, content| dump_tokens(&label(path), content)),
+        Mode::Tree => print_pass(&files, |path, content| dump_tree(&label(path), content)),
+        Mode::Diff => print_pass(&files, |path, content| diff_text(&label(path), content, &formatter)),
+        Mode::Write => write_pass(&files, &formatter),
+        Mode::Check => check_pass(&files, &formatter),
+    };
+    Ok(exit)
 }
 
-fn collect_files(dir: &str, out: &mut Vec<String>) {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("Error reading {dir}: {e}");
-            return;
-        }
-    };
-    let mut paths: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-    paths.sort_by_key(|e| e.path());
-    for entry in paths {
-        let path = entry.path();
-        let metadata = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
-        };
+fn main() -> ExitCode {
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::panic::set_hook(Box::new(|_| {}));
+    }
 
-        if metadata.is_dir() {
-            if !metadata.file_type().is_symlink() {
-                collect_files(&path.to_string_lossy(), out);
-            }
-        } else if let Some(ext) = path.extension() {
-            let ext = ext.to_string_lossy();
-            if ext == "php" || ext == "html" {
-                out.push(path.to_string_lossy().to_string());
-            }
+    match run() {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("{e:?}");
+            ExitCode::FAILURE
         }
     }
 }

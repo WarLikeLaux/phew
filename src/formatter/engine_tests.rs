@@ -202,10 +202,12 @@ fn single_line_brace_switch_is_idempotent() {
     let input = "<?php switch ($x) { case 1: echo \"a\"; break; default: echo \"d\"; } ?>";
     let expected = "\
 <?php switch ($x) {
-    case 1: echo \"a\"; ?>
-        <?php break; ?>
-    <?php default: echo \"d\"; ?>
-    <?php } ?>
+    case 1:
+        echo \"a\";
+        break;
+    default:
+        echo \"d\";
+} ?>
 ";
     let once = format_str(input);
     assert_eq!(once, expected);
@@ -227,6 +229,7 @@ fn closure_in_assignment_array_is_idempotent() {
     let input = "<?php $c = [\"x\" => function ($m) { return $m->status; }, \"header\" => [\"alpha\" => $m->attribute, \"beta\" => $m->other, \"gamma\" => $m->more]]; ?>";
     let once = format_str(input);
     assert_eq!(format_str(&once), once);
-    assert!(once.contains("function ($m) { return $m->status; },"));
+    assert!(once.contains("\"x\" => function ($m) {"));
+    assert!(once.contains("        return $m->status;"));
     assert!(once.lines().count() > 5);
 }

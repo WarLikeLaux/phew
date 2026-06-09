@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-70_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-104_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.7.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Tests](https://img.shields.io/badge/Tests-84_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-126_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.8.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -45,8 +45,22 @@ phew views/site/index.php
 # Перезаписать файл на месте
 phew -w views/site/index.php
 
-# Отформатировать всю директорию рекурсивно (.php и .html)
+# Отформатировать всю директорию рекурсивно (.php и .html), обход и форматирование параллельны
+# Файлы из .gitignore и .phewignore пропускаются
 phew -w views/
+
+# Прочитать буфер из stdin и вывести отформатированный в stdout (для редактора по пайпу)
+cat views/site/index.php | phew -
+```
+
+### CI и предпросмотр
+
+```bash
+# Режим для CI: ничего не пишет, выходит с кодом ≠0, если файлы не отформатированы
+phew --check views/
+
+# Показать, что изменилось бы, без записи (unified diff)
+phew --diff views/
 ```
 
 ### Интеграция в проект
@@ -61,7 +75,7 @@ phew -w views/ widgets/ && git add -u
 
 ```sh
 #!/bin/sh
-phew -w views/ && git add views/
+phew --check views/ || { echo "Запусти: phew -w views/"; exit 1; }
 ```
 
 Отладочные режимы:
@@ -70,6 +84,8 @@ phew -w views/ && git add views/
 phew --tokens views/site/index.php   # токены лексера
 phew --tree views/site/index.php     # AST-дерево
 ```
+
+Режимы `--write`, `--check`, `--diff`, `--tokens`, `--tree` взаимоисключающие.
 
 ## Конфигурация
 
@@ -132,15 +148,15 @@ phew --indent-size 2 views/
 
 ## Что умеет
 
-- ✅ HTML + PHP в едином AST: правильные отступы для вложенных элементов и блоков
-- ✅ Альтернативный синтаксис (`if/foreach/for/while/switch ... endforeach;`) и brace-стиль
-- ✅ Форматирование PHP: пробелы у ключевых слов, `=>`, запятых, trailing comma
-- ✅ Разбивка длинных строк (≤120): по аргументам, цепочкам `->`, вложенным массивам, тернарникам
-- ✅ Yii 2: `::begin()`/`::end()` (ActiveForm, Modal, Pjax), GridView, DetailView, Nav, Breadcrumbs, виджеты
-- ✅ Inline- и void-элементы, группировка текста + `<?=` на одной строке
-- ✅ Header-блоки: PSR-12 порядок `declare → use → docblock`, сортировка и дедуп `use`, нормализация `@var`, слияние docblock
-- ✅ PHP внутри HTML-атрибутов с вложенными кавычками (`href="<?= "..." ?>"`)
-- ✅ Рекурсивный обход директорий (`.php`, `.html`), идемпотентность, POSIX EOF
+- **HTML + PHP в едином AST** — отступы вложенных элементов и блоков, alt-синтаксис (`endforeach;`) и brace-стиль
+- **Разбивка длинных строк** (≤120) — аргументы, цепочки `->`, массивы, тернарники, `match`
+- **Yii 2** — виджеты (`GridView`, `ActiveForm`, `Nav`…), `::begin()`/`::end()`, PHP внутри атрибутов
+- **Header-блоки** — PSR-12 порядок `declare → use → docblock`, сортировка/дедуп `use`, `@var`
+- **PHP 8.x** — `match`, `enum`, named args, first-class callable
+- **Надёжность** — идемпотентность, round-trip, `.gitignore`/`.phewignore`, параллельный обход
+- **CI и редакторы** — `--check`, `--diff`, stdin → stdout
+
+Известные ограничения — в [`docs/known-issues.md`](docs/known-issues.md).
 
 ## Политика форматирования
 
@@ -154,7 +170,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**70 unit-тестов** и **104 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`). Полная проверка перед коммитом:
+**84 unit-теста**, **126 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures

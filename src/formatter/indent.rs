@@ -68,6 +68,9 @@ pub fn is_switch_case_peer(code: &str) -> bool {
 }
 
 pub fn is_header_php_block(code: &str) -> bool {
+    if code.trim_start().starts_with("/**") && !is_php_block_opener(code) {
+        return true;
+    }
     let has_by_line = code.lines().any(|line| {
         let t = line.trim();
         t.starts_with("use ") || t.starts_with("declare(")
@@ -275,6 +278,7 @@ pub fn normalize_statements(code: &str) -> String {
     let mut paren_depth: i32 = 0;
     let mut brace_depth: i32 = 0;
     let mut bracket_depth: i32 = 0;
+    let mut in_case_label = false;
 
     while i < len {
         let ch = chars[i];
@@ -300,12 +304,22 @@ pub fn normalize_statements(code: &str) -> String {
             i += 1;
             continue;
         }
-        if paren_depth <= 0
-            && !result.ends_with('\n')
-            && !result.trim_end().is_empty()
-            && (matches_keyword_at(&chars, i, "case ") || matches_keyword_at(&chars, i, "default:"))
-        {
-            result.push('\n');
+        if paren_depth <= 0 && (matches_keyword_at(&chars, i, "case ") || matches_keyword_at(&chars, i, "default:")) {
+            if !result.ends_with('\n') && !result.trim_end().is_empty() {
+                result.push('\n');
+            }
+            in_case_label = true;
+        }
+        if in_case_label && ch == ':' && paren_depth <= 0 && bracket_depth <= 0 {
+            if next == Some(':') {
+                result.push_str("::");
+                i += 2;
+                continue;
+            }
+            result.push_str(":\n");
+            in_case_label = false;
+            i += 1;
+            continue;
         }
         result.push(ch);
         let next_is_nl = next.is_some_and(|c| c == '\n');
@@ -608,6 +622,7 @@ impl Formatter {
         };
         let mut result = String::new();
         let mut depth: i32 = 0;
+        let mut switch_levels: Vec<(i32, bool)> = Vec::new();
         let mut prev_blank = false;
         let mut first_content = true;
         let mut prev_was_doc_close = false;
@@ -755,7 +770,38 @@ impl Formatter {
             }
 
             let formatted = format_php_code(trimmed);
-            self.emit_reindented_line(&formatted, pad, &mut depth, &mut result);
+            let lower_fmt = formatted.to_lowercase();
+            let is_switch_opener = lower_fmt.starts_with("switch") && formatted.ends_with('{');
+            let is_case_label = lower_fmt.starts_with("case ") || lower_fmt.starts_with("default:");
+            let closes_block = formatted.starts_with('}');
+            let case_extra = match switch_levels.last() {
+                Some(&(label_depth, in_body)) => {
+                    let closes_switch = closes_block && depth <= label_depth;
+                    let label_here = is_case_label && depth == label_depth;
+                    usize::from(in_body && !closes_switch && !label_here)
+                }
+                None => 0,
+            };
+            if case_extra > 0 {
+                let case_pad = format!("{pad}{}", self.indent.repeat(case_extra));
+                self.emit_reindented_line(&formatted, &case_pad, &mut depth, &mut result);
+            } else {
+                self.emit_reindented_line(&formatted, pad, &mut depth, &mut result);
+            }
+            if is_switch_opener {
+                switch_levels.push((depth, false));
+            } else if is_case_label {
+                if let Some(entry) = switch_levels.last_mut()
+                    && depth == entry.0
+                {
+                    entry.1 = true;
+                }
+            } else if closes_block
+                && let Some(&(label_depth, _)) = switch_levels.last()
+                && depth < label_depth
+            {
+                switch_levels.pop();
+            }
             if let Some(marker) = detect_heredoc(trimmed) {
                 heredoc_marker = Some(marker);
             } else if has_unclosed_string(trimmed) {

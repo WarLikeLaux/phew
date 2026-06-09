@@ -1,5 +1,166 @@
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+
+use ignore::{WalkBuilder, WalkState};
+
+const FORMATTABLE_EXTENSIONS: [&str; 2] = ["php", "html"];
+const PHEW_IGNORE_FILE: &str = ".phewignore";
+
+pub fn collect_files(paths: &[String]) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for path in paths {
+        let target = Path::new(path);
+        match std::fs::metadata(target) {
+            Ok(meta) if meta.is_dir() => files.extend(walk_dir(target)),
+            Ok(_) => files.push(target.to_path_buf()),
+            Err(e) => eprintln!("Error reading metadata {}: {e}", target.display()),
+        }
+    }
+    files
+}
+
+fn walk_dir(dir: &Path) -> Vec<PathBuf> {
+    let (tx, rx) = mpsc::channel::<PathBuf>();
+    WalkBuilder::new(dir)
+        .git_global(false)
+        .git_exclude(false)
+        .require_git(false)
+        .add_custom_ignore_filename(PHEW_IGNORE_FILE)
+        .build_parallel()
+        .run(|| {
+            let tx = tx.clone();
+            Box::new(move |result| {
+                if let Ok(entry) = result
+                    && entry.file_type().is_some_and(|file_type| file_type.is_file())
+                    && is_formattable(entry.path())
+                {
+                    let _ = tx.send(entry.into_path());
+                }
+                WalkState::Continue
+            })
+        });
+    drop(tx);
+    let mut files: Vec<PathBuf> = rx.iter().collect();
+    files.sort();
+    files
+}
+
+fn is_formattable(path: &Path) -> bool {
+    path.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| {
+        FORMATTABLE_EXTENSIONS
+            .iter()
+            .any(|allowed| ext.eq_ignore_ascii_case(allowed))
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    struct TempTree {
+        root: PathBuf,
+    }
+
+    impl TempTree {
+        fn new(label: &str) -> Self {
+            let root = std::env::temp_dir().join(format!("phew_walker_{}_{}", std::process::id(), label));
+            std::fs::create_dir_all(&root).unwrap();
+            Self { root }
+        }
+
+        fn touch(&self, rel: &str) {
+            self.write(rel, "");
+        }
+
+        fn write(&self, rel: &str, content: &str) {
+            let path = self.root.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, content).unwrap();
+        }
+
+        fn arg(&self) -> String {
+            self.root.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for TempTree {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
     #[test]
-    fn it_loads() {}
+    fn collects_only_formattable_extensions_sorted() {
+        let tree = TempTree::new("filter");
+        tree.touch("b.php");
+        tree.touch("a.html");
+        tree.touch("notes.txt");
+        tree.touch("Makefile");
+
+        let files = collect_files(&[tree.arg()]);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["a.html", "b.php"]);
+    }
+
+    #[test]
+    fn recurses_into_nested_directories() {
+        let tree = TempTree::new("nested");
+        tree.touch("top.php");
+        tree.touch("deep/inner/leaf.php");
+        tree.touch("deep/skip.css");
+
+        let files = collect_files(&[tree.arg()]);
+
+        assert_eq!(files.len(), 2);
+        assert!(files.iter().any(|p| p.ends_with("top.php")));
+        assert!(files.iter().any(|p| p.ends_with("deep/inner/leaf.php")));
+    }
+
+    #[test]
+    fn phewignore_excludes_matching_paths() {
+        let tree = TempTree::new("phewignore");
+        tree.touch("keep.php");
+        tree.touch("vendor/dep.php");
+        tree.write(".phewignore", "vendor/\n");
+
+        let files = collect_files(&[tree.arg()]);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["keep.php"]);
+    }
+
+    #[test]
+    fn gitignore_excludes_matching_paths() {
+        let tree = TempTree::new("gitignore");
+        tree.touch("app.php");
+        tree.touch("build/gen.php");
+        tree.write(".gitignore", "build/\n");
+
+        let files = collect_files(&[tree.arg()]);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(names, vec!["app.php"]);
+    }
+
+    #[test]
+    fn explicit_file_argument_bypasses_extension_filter() {
+        let tree = TempTree::new("explicit");
+        tree.touch("raw");
+
+        let arg = tree.root.join("raw").to_string_lossy().into_owned();
+        let files = collect_files(&[arg]);
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("raw"));
+    }
 }

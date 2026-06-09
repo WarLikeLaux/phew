@@ -6,7 +6,7 @@ use super::indent::{
     is_php_block_closer, is_php_block_opener, is_switch_case_peer, split_header_and_opener, visual_len,
 };
 use super::php::{format_php_code, join_php_lines};
-use super::split::find_ternary_positions;
+use super::split::{find_ternary_positions, has_expandable_closure};
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
@@ -71,15 +71,102 @@ fn has_literal_quote(value: &str, quote: char) -> bool {
     false
 }
 
+fn attr_quote(value: &str) -> char {
+    if has_literal_quote(value, '"') && !has_literal_quote(value, '\'') {
+        '\''
+    } else {
+        '"'
+    }
+}
+
+fn normalize_php_segment(seg: &str) -> String {
+    let Some(inner) = seg.strip_suffix("?>") else {
+        return seg.to_string();
+    };
+    if let Some(rest) = inner.strip_prefix("<?=") {
+        format!("<?= {} ?>", format_php_code(&join_php_lines(rest.trim())))
+    } else if let Some(rest) = inner.strip_prefix("<?php") {
+        format!("<?php {} ?>", format_php_code(&join_php_lines(rest.trim())))
+    } else {
+        seg.to_string()
+    }
+}
+
+fn find_php_close_tag(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    while i + 1 < bytes.len() {
+        let b = bytes[i];
+        if (in_single || in_double) && b == b'\\' {
+            i += 2;
+            continue;
+        }
+        match b {
+            b'\'' if !in_double => in_single = !in_single,
+            b'"' if !in_single => in_double = !in_double,
+            b'?' if !in_single && !in_double && bytes[i + 1] == b'>' => return Some(i),
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+fn normalize_attr_value(value: &str) -> String {
+    if !value.contains("<?") {
+        return value.to_string();
+    }
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(start) = rest.find("<?") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        let Some(close) = find_php_close_tag(after) else {
+            out.push_str(after);
+            return out;
+        };
+        out.push_str(&normalize_php_segment(&after[..close + 2]));
+        rest = &after[close + 2..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn single_php_segment(value: &str) -> Option<(String, bool, String, String)> {
+    let start = value.find("<?")?;
+    let after = &value[start..];
+    let is_echo = after.starts_with("<?=");
+    let is_php = after.starts_with("<?php");
+    if !is_echo && !is_php {
+        return None;
+    }
+    let close = find_php_close_tag(after)?;
+    let suffix = &after[close + 2..];
+    if suffix.contains("<?") {
+        return None;
+    }
+    let inner = &after[..close];
+    let code = if is_echo {
+        inner.strip_prefix("<?=")?.trim()
+    } else {
+        inner.strip_prefix("<?php")?.trim()
+    };
+    Some((
+        value[..start].to_string(),
+        is_echo,
+        code.to_string(),
+        suffix.to_string(),
+    ))
+}
+
 fn format_attribute(attr: &Attribute) -> String {
     let Some(value) = &attr.value else {
         return attr.name.clone();
     };
-    let quote = if has_literal_quote(value, '"') && !has_literal_quote(value, '\'') {
-        '\''
-    } else {
-        '"'
-    };
+    let value = normalize_attr_value(value);
+    let quote = attr_quote(&value);
     format!("{}={quote}{value}{quote}", attr.name)
 }
 
@@ -98,11 +185,43 @@ impl Formatter {
         output.push_str(&format!("{pad}<{name}\n"));
         let attr_pad = format!("{pad}{indent}");
         for attr in attributes {
-            output.push_str(&attr_pad);
-            output.push_str(&format_attribute(attr));
-            output.push('\n');
+            let line = format!("{attr_pad}{}", format_attribute(attr));
+            if visual_len(&line) <= self.max_line_length || !self.emit_attribute_split(attr, &attr_pad, output) {
+                output.push_str(&line);
+                output.push('\n');
+            }
         }
         output.push_str(&format!("{pad}>\n"));
+    }
+
+    fn emit_attribute_split(&self, attr: &Attribute, attr_pad: &str, output: &mut String) -> bool {
+        let Some(raw) = &attr.value else {
+            return false;
+        };
+        let value = normalize_attr_value(raw);
+        let Some((prefix, is_echo, code, suffix)) = single_php_segment(&value) else {
+            return false;
+        };
+        let Some(split) = self.try_split_long_line(&code, attr_pad) else {
+            return false;
+        };
+        let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return false;
+        }
+        let quote = attr_quote(&value);
+        let open = if is_echo { "<?=" } else { "<?php" };
+        output.push_str(&format!(
+            "{attr_pad}{}={quote}{prefix}{open} {}\n",
+            attr.name,
+            lines[0].trim_start()
+        ));
+        for line in &lines[1..lines.len() - 1] {
+            output.push_str(line);
+            output.push('\n');
+        }
+        output.push_str(&format!("{} ?>{suffix}{quote}\n", lines[lines.len() - 1]));
+        true
     }
 }
 
@@ -294,6 +413,34 @@ struct PhpDepthState {
     switch_stack: Vec<usize>,
 }
 
+fn is_self_contained_brace_switch(code: &str) -> bool {
+    let trimmed = code.trim();
+    if !trimmed.to_lowercase().starts_with("switch") || !trimmed.ends_with('}') {
+        return false;
+    }
+    let chars: Vec<char> = trimmed.chars().collect();
+    let mut braces = 0i32;
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i += 1;
+            while i < chars.len() && chars[i] != ch {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+        } else if ch == '{' {
+            braces += 1;
+        } else if ch == '}' {
+            braces -= 1;
+        }
+        i += 1;
+    }
+    braces == 0
+}
+
 impl Formatter {
     fn emit_switch_stmt(&self, trimmed: &str, state: &mut PhpDepthState, output: &mut String) {
         let indent = &self.indent;
@@ -372,10 +519,18 @@ impl Formatter {
         let reindented = self.reindent_php_block(code, pad);
         let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
         if lines.len() > 1 {
-            output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
-            for line in &lines[1..lines.len() - 1] {
-                output.push_str(line);
-                output.push('\n');
+            if lines[0].trim_start().starts_with("/**") {
+                output.push_str(&format!("{pad}<?php\n"));
+                for line in &lines[..lines.len() - 1] {
+                    output.push_str(line);
+                    output.push('\n');
+                }
+            } else {
+                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+                for line in &lines[1..lines.len() - 1] {
+                    output.push_str(line);
+                    output.push('\n');
+                }
             }
             output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
         } else if lines.len() == 1 {
@@ -410,6 +565,11 @@ impl Formatter {
         } else if !state.switch_stack.is_empty() && contains_break(&lower) {
             let stmt_pad = indent.repeat(state.depth);
             output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
+        } else if !state.switch_stack.is_empty() && code.trim() == "}" {
+            let lvl = state.switch_stack.pop().unwrap_or(state.depth.saturating_sub(1));
+            let stmt_pad = indent.repeat(lvl);
+            output.push_str(&format!("{stmt_pad}<?php {formatted} ?>\n"));
+            state.depth = lvl;
         } else if is_php_block_closer(code) {
             state.depth = state.depth.saturating_sub(1);
             let pad_less = indent.repeat(state.depth);
@@ -439,7 +599,8 @@ impl Formatter {
         }
         let single = format!("{pad}<?php {formatted} ?>");
         let is_alt_syntax_opener = code.trim().ends_with(':');
-        if visual_len(&single) <= self.max_line_length || is_alt_syntax_opener {
+        if (visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted)) || is_alt_syntax_opener
+        {
             output.push_str(&format!("{single}\n"));
             if is_php_block_opener(code) {
                 *depth += 1;
@@ -454,7 +615,10 @@ impl Formatter {
             output.push_str(&format!(
                 "{pad}<?php {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
             ));
-        } else if let Some(split) = self.try_split_long_line(&formatted, pad) {
+        } else if let Some(split) = self
+            .try_split_long_line(&formatted, pad)
+            .or_else(|| self.expand_braced_value(&formatted, pad))
+        {
             let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
             if lines.len() > 1 {
                 output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
@@ -503,7 +667,7 @@ impl Formatter {
         }
         let semicolons = count_top_level_semicolons(code);
         let is_multiline = code.contains('\n') || semicolons > 1 || has_switch_case(code);
-        if is_multiline && has_switch_case(code) {
+        if is_multiline && has_switch_case(code) && !is_self_contained_brace_switch(code) {
             self.emit_php_switch_block(code, state, output);
         } else if is_multiline {
             self.emit_multiline_php(code, pad, &mut state.depth, output);
@@ -651,21 +815,89 @@ fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
     }
 }
 
+fn render_inline_run(nodes: &[Node]) -> String {
+    nodes
+        .iter()
+        .map(render_node_inline)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+fn is_echo_like(node: &Node) -> bool {
+    matches!(node, Node::PhpEcho(_)) || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
+}
+
+fn is_inline_atom(node: &Node) -> bool {
+    is_echo_like(node) || is_inline_element_node(node)
+}
+
+fn line_reparses_as_run(nodes: &[Node]) -> bool {
+    if nodes.len() == 1 {
+        return true;
+    }
+    let has_echo = nodes.iter().any(is_echo_like);
+    let has_anchor = nodes
+        .iter()
+        .any(|node| matches!(node, Node::Text(s) if !s.trim().is_empty()) || is_inline_element_node(node));
+    has_echo && has_anchor
+}
+
+fn inline_segments(nodes: &[Node]) -> Vec<usize> {
+    let mut bounds = Vec::new();
+    for (idx, node) in nodes.iter().enumerate() {
+        if is_inline_atom(node) {
+            bounds.push(idx + 1);
+        }
+    }
+    if bounds.last() != Some(&nodes.len()) {
+        bounds.push(nodes.len());
+    }
+    bounds
+}
+
 impl Formatter {
+    fn inline_run_fits(&self, nodes: &[Node], pad: &str) -> bool {
+        visual_len(pad) + visual_len(&render_inline_run(nodes)) <= self.max_line_length
+    }
+
     fn emit_inline_run(&self, nodes: &[Node], pad: &str, depth: usize, output: &mut String) {
-        let raw: String = nodes.iter().map(render_node_inline).collect();
-        let content = raw.trim().to_string();
+        let content = render_inline_run(nodes);
         if content.is_empty() {
             return;
         }
-        let line = format!("{pad}{content}");
-        if visual_len(&line) <= self.max_line_length {
-            output.push_str(&line);
+        if visual_len(pad) + visual_len(&content) <= self.max_line_length {
+            output.push_str(pad);
+            output.push_str(&content);
             output.push('\n');
-        } else {
-            for node in nodes {
-                self.format_nodes(std::slice::from_ref(node), depth, output);
+            return;
+        }
+
+        let bounds = inline_segments(nodes);
+        let mut line_start = 0;
+        let mut line_end = bounds[0];
+        for &seg_end in &bounds[1..] {
+            let candidate = &nodes[line_start..seg_end];
+            if self.inline_run_fits(candidate, pad) && line_reparses_as_run(candidate) {
+                line_end = seg_end;
+            } else {
+                self.emit_inline_line(&nodes[line_start..line_end], pad, depth, output);
+                line_start = line_end;
+                line_end = seg_end;
             }
+        }
+        self.emit_inline_line(&nodes[line_start..line_end], pad, depth, output);
+    }
+
+    fn emit_inline_line(&self, nodes: &[Node], pad: &str, depth: usize, output: &mut String) {
+        if nodes.len() > 1 && self.inline_run_fits(nodes, pad) && line_reparses_as_run(nodes) {
+            output.push_str(pad);
+            output.push_str(&render_inline_run(nodes));
+            output.push('\n');
+            return;
+        }
+        for node in nodes {
+            self.format_nodes(std::slice::from_ref(node), depth, output);
         }
     }
 }
