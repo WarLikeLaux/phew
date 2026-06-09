@@ -12,28 +12,8 @@ pub(crate) fn format_attributes(attrs: &[Attribute]) -> String {
     format!(" {}", parts.join(" "))
 }
 
-fn has_literal_quote(value: &str, quote: char) -> bool {
-    let chars: Vec<char> = value.chars().collect();
-    let mut in_php = false;
-    let mut i = 0;
-    while i < chars.len() {
-        if !in_php && chars[i] == '<' && chars.get(i + 1) == Some(&'?') {
-            in_php = true;
-            i += 2;
-        } else if in_php && chars[i] == '?' && chars.get(i + 1) == Some(&'>') {
-            in_php = false;
-            i += 2;
-        } else if !in_php && chars[i] == quote {
-            return true;
-        } else {
-            i += 1;
-        }
-    }
-    false
-}
-
 fn attr_quote(value: &str) -> char {
-    if has_literal_quote(value, '"') && !has_literal_quote(value, '\'') {
+    if value.contains('"') && !value.contains('\'') {
         '\''
     } else {
         '"'
