@@ -612,7 +612,6 @@ pub fn count_top_level_semicolons(code: &str) -> usize {
 }
 
 impl Formatter {
-    #[allow(clippy::too_many_lines)]
     pub(crate) fn reindent_php_block(&self, code: &str, pad: &str) -> String {
         let needs_normalize = !code.contains('\n') && (code.contains(';') || has_switch_case(code));
         let code = if needs_normalize {
@@ -620,211 +619,288 @@ impl Formatter {
         } else {
             join_ternary_lines(code)
         };
-        let mut result = String::new();
-        let mut depth: i32 = 0;
-        let mut switch_levels: Vec<(i32, bool)> = Vec::new();
-        let mut prev_blank = false;
-        let mut first_content = true;
-        let mut prev_was_doc_close = false;
-        let mut prev_was_declare = false;
         let is_header = is_header_php_block(&code);
-        let mut in_string: Option<char> = None;
-        let mut heredoc_marker: Option<String> = None;
-        let mut pending_docblocks: Vec<String> = Vec::new();
-        let mut pending_descriptions: Vec<String> = Vec::new();
-        let mut deferred_lines: Vec<String> = Vec::new();
+        Reindenter::new(self, pad, is_header).run(&code)
+    }
+}
 
-        let mut in_docblock = false;
-        let mut docblock_bodies: Vec<String> = Vec::new();
+struct Reindenter<'a> {
+    fmt: &'a Formatter,
+    pad: &'a str,
+    is_header: bool,
+    result: String,
+    depth: i32,
+    switch_levels: Vec<(i32, bool)>,
+    prev_blank: bool,
+    first_content: bool,
+    prev_was_doc_close: bool,
+    prev_was_declare: bool,
+    in_string: Option<char>,
+    heredoc_marker: Option<String>,
+    pending_docblocks: Vec<String>,
+    pending_descriptions: Vec<String>,
+    deferred_lines: Vec<String>,
+    in_docblock: bool,
+    docblock_bodies: Vec<String>,
+}
 
+impl<'a> Reindenter<'a> {
+    fn new(fmt: &'a Formatter, pad: &'a str, is_header: bool) -> Self {
+        Self {
+            fmt,
+            pad,
+            is_header,
+            result: String::new(),
+            depth: 0,
+            switch_levels: Vec::new(),
+            prev_blank: false,
+            first_content: true,
+            prev_was_doc_close: false,
+            prev_was_declare: false,
+            in_string: None,
+            heredoc_marker: None,
+            pending_docblocks: Vec::new(),
+            pending_descriptions: Vec::new(),
+            deferred_lines: Vec::new(),
+            in_docblock: false,
+            docblock_bodies: Vec::new(),
+        }
+    }
+
+    fn run(mut self, code: &str) -> String {
         for line in code.lines() {
-            if let Some(ref marker) = heredoc_marker {
-                result.push_str(line);
-                result.push('\n');
-                let closing = line.trim().trim_end_matches(';');
-                if closing == marker.as_str() {
-                    let m = marker.clone();
-                    heredoc_marker = None;
-                    let after_marker = line.trim().strip_prefix(m.as_str()).unwrap_or("");
-                    let (o, c) = count_brackets(after_marker);
-                    depth += o as i32 - c as i32;
-                    depth = depth.max(0);
-                }
-                continue;
-            }
-            if let Some(quote) = in_string {
-                result.push_str(line);
-                result.push('\n');
-                if count_unescaped_quotes(line, quote) % 2 == 1 {
-                    in_string = None;
-                    if let Some(pos) = line.rfind(quote) {
-                        let after_quote = &line[pos + 1..];
-                        let (o, c) = count_brackets(after_quote);
-                        depth += o as i32 - c as i32;
-                        depth = depth.max(0);
-                    }
-                }
-                continue;
-            }
-            let trimmed = line.trim();
+            self.process_line(line);
+        }
+        self.finish()
+    }
 
-            if in_docblock {
-                if trimmed == "*/" || trimmed == "**/" {
-                    in_docblock = false;
-                    let all_var = !docblock_bodies.is_empty() && docblock_bodies.iter().all(|b| b.starts_with("@var "));
-                    if all_var {
-                        pending_docblocks.append(&mut docblock_bodies);
-                    } else if is_header {
-                        pending_descriptions.append(&mut docblock_bodies);
-                    } else {
-                        if !pending_docblocks.is_empty() || !pending_descriptions.is_empty() {
-                            self.flush_docblocks(
-                                &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
-                                pad,
-                                &mut depth,
-                                &mut result,
-                            );
-                            pending_docblocks.clear();
-                            pending_descriptions.clear();
-                        }
-                        self.emit_reindented_line("/**", pad, &mut depth, &mut result);
-                        for body in &docblock_bodies {
-                            self.emit_reindented_line(&format!("* {body}"), pad, &mut depth, &mut result);
-                        }
-                        self.emit_reindented_line("*/", pad, &mut depth, &mut result);
-                        docblock_bodies.clear();
-                        prev_was_doc_close = true;
-                    }
-                } else if let Some(body) = trimmed.strip_prefix("* ") {
-                    docblock_bodies.push(body.to_string());
-                } else if trimmed == "*" {
-                    docblock_bodies.push(String::new());
-                }
-                continue;
-            }
+    fn process_line(&mut self, line: &str) {
+        if self.heredoc_marker.is_some() {
+            self.continue_heredoc(line);
+            return;
+        }
+        if self.in_string.is_some() {
+            self.continue_string(line);
+            return;
+        }
+        let trimmed = line.trim();
+        if self.in_docblock {
+            self.consume_docblock(trimmed);
+            return;
+        }
+        if trimmed.is_empty() {
+            self.handle_blank();
+            return;
+        }
+        if self.first_content && !self.prev_blank && self.is_header {
+            self.result.push('\n');
+        }
+        self.first_content = false;
+        let is_use_import = trimmed.starts_with("use ");
+        let is_declare = trimmed.starts_with("declare(");
+        if self.absorb_pending(trimmed, is_use_import, is_declare) {
+            return;
+        }
+        if self.prev_was_declare && !is_declare && !self.prev_blank {
+            self.result.push('\n');
+        }
+        if self.prev_was_doc_close && !self.prev_blank {
+            self.result.push('\n');
+        }
+        self.prev_blank = false;
+        self.prev_was_doc_close = trimmed == "*/";
+        self.prev_was_declare = is_declare;
+        if let Some(body) = extract_docblock_body(trimmed) {
+            self.pending_docblocks.push(body);
+            self.prev_was_declare = false;
+            return;
+        }
+        if trimmed == "/**" {
+            self.in_docblock = true;
+            self.docblock_bodies.clear();
+            return;
+        }
+        self.emit_code(trimmed);
+    }
 
-            if trimmed.is_empty() {
-                if !prev_blank && !first_content {
-                    if pending_docblocks.is_empty() && !in_docblock {
-                        result.push('\n');
-                    }
-                    prev_blank = true;
-                }
-                continue;
-            }
-            if first_content && !prev_blank && is_header {
-                result.push('\n');
-            }
-            first_content = false;
-            let is_use_import = trimmed.starts_with("use ");
-            let is_declare = trimmed.starts_with("declare(");
+    fn continue_heredoc(&mut self, line: &str) {
+        self.result.push_str(line);
+        self.result.push('\n');
+        let Some(marker) = self.heredoc_marker.clone() else {
+            return;
+        };
+        let closing = line.trim().trim_end_matches(';');
+        if closing == marker {
+            self.heredoc_marker = None;
+            let after_marker = line.trim().strip_prefix(marker.as_str()).unwrap_or("");
+            let (o, c) = count_brackets(after_marker);
+            self.depth = (self.depth + o as i32 - c as i32).max(0);
+        }
+    }
 
-            let has_pending = !pending_docblocks.is_empty() || !pending_descriptions.is_empty();
-            if has_pending
-                && extract_docblock_body(trimmed).is_none()
-                && trimmed != "/**"
-                && !is_use_import
-                && !is_declare
-            {
-                if !deferred_lines.is_empty() {
-                    emit_deferred_lines(self, &deferred_lines, pad, &mut depth, &mut result);
-                    result.push('\n');
-                    deferred_lines.clear();
-                }
-                self.flush_docblocks(
-                    &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
-                    pad,
-                    &mut depth,
-                    &mut result,
-                );
-                pending_docblocks.clear();
-                pending_descriptions.clear();
-                prev_was_doc_close = true;
-                prev_blank = false;
-            } else if has_pending && (is_use_import || is_declare) {
-                deferred_lines.push(trimmed.to_string());
-                prev_was_declare = is_declare;
-                continue;
-            }
-
-            if prev_was_declare && !is_declare && !prev_blank {
-                result.push('\n');
-            }
-            if prev_was_doc_close && !prev_blank {
-                result.push('\n');
-            }
-            prev_blank = false;
-            prev_was_doc_close = trimmed == "*/";
-            prev_was_declare = is_declare;
-
-            if let Some(body) = extract_docblock_body(trimmed) {
-                pending_docblocks.push(body);
-                prev_was_declare = false;
-                continue;
-            }
-
-            if trimmed == "/**" {
-                in_docblock = true;
-                docblock_bodies.clear();
-                continue;
-            }
-
-            let formatted = format_php_code(trimmed);
-            let lower_fmt = formatted.to_lowercase();
-            let is_switch_opener = lower_fmt.starts_with("switch") && formatted.ends_with('{');
-            let is_case_label = lower_fmt.starts_with("case ") || lower_fmt.starts_with("default:");
-            let closes_block = formatted.starts_with('}');
-            let case_extra = match switch_levels.last() {
-                Some(&(label_depth, in_body)) => {
-                    let closes_switch = closes_block && depth <= label_depth;
-                    let label_here = is_case_label && depth == label_depth;
-                    usize::from(in_body && !closes_switch && !label_here)
-                }
-                None => 0,
-            };
-            if case_extra > 0 {
-                let case_pad = format!("{pad}{}", self.indent.repeat(case_extra));
-                self.emit_reindented_line(&formatted, &case_pad, &mut depth, &mut result);
-            } else {
-                self.emit_reindented_line(&formatted, pad, &mut depth, &mut result);
-            }
-            if is_switch_opener {
-                switch_levels.push((depth, false));
-            } else if is_case_label {
-                if let Some(entry) = switch_levels.last_mut()
-                    && depth == entry.0
-                {
-                    entry.1 = true;
-                }
-            } else if closes_block
-                && let Some(&(label_depth, _)) = switch_levels.last()
-                && depth < label_depth
-            {
-                switch_levels.pop();
-            }
-            if let Some(marker) = detect_heredoc(trimmed) {
-                heredoc_marker = Some(marker);
-            } else if has_unclosed_string(trimmed) {
-                in_string = detect_open_quote(trimmed);
+    fn continue_string(&mut self, line: &str) {
+        self.result.push_str(line);
+        self.result.push('\n');
+        let Some(quote) = self.in_string else {
+            return;
+        };
+        if count_unescaped_quotes(line, quote) % 2 == 1 {
+            self.in_string = None;
+            if let Some(pos) = line.rfind(quote) {
+                let (o, c) = count_brackets(&line[pos + 1..]);
+                self.depth = (self.depth + o as i32 - c as i32).max(0);
             }
         }
+    }
 
-        if !pending_docblocks.is_empty() || !pending_descriptions.is_empty() {
-            if !deferred_lines.is_empty() {
-                emit_deferred_lines(self, &deferred_lines, pad, &mut depth, &mut result);
-                result.push('\n');
-            }
-            self.flush_docblocks(
-                &merge_descriptions_and_vars(&pending_descriptions, &pending_docblocks),
-                pad,
-                &mut depth,
-                &mut result,
-            );
-        } else if !deferred_lines.is_empty() {
-            emit_deferred_lines(self, &deferred_lines, pad, &mut depth, &mut result);
+    fn consume_docblock(&mut self, trimmed: &str) {
+        if trimmed == "*/" || trimmed == "**/" {
+            self.in_docblock = false;
+            self.close_docblock();
+        } else if let Some(body) = trimmed.strip_prefix("* ") {
+            self.docblock_bodies.push(body.to_string());
+        } else if trimmed == "*" {
+            self.docblock_bodies.push(String::new());
         }
+    }
 
-        let result = result.trim_end_matches('\n').to_string() + "\n";
+    fn close_docblock(&mut self) {
+        let all_var = !self.docblock_bodies.is_empty() && self.docblock_bodies.iter().all(|b| b.starts_with("@var "));
+        if all_var {
+            self.pending_docblocks.append(&mut self.docblock_bodies);
+        } else if self.is_header {
+            self.pending_descriptions.append(&mut self.docblock_bodies);
+        } else {
+            self.flush_pending_docblocks();
+            let fmt = self.fmt;
+            fmt.emit_reindented_line("/**", self.pad, &mut self.depth, &mut self.result);
+            let bodies = std::mem::take(&mut self.docblock_bodies);
+            for body in &bodies {
+                fmt.emit_reindented_line(&format!("* {body}"), self.pad, &mut self.depth, &mut self.result);
+            }
+            fmt.emit_reindented_line("*/", self.pad, &mut self.depth, &mut self.result);
+            self.prev_was_doc_close = true;
+        }
+    }
+
+    fn handle_blank(&mut self) {
+        if !self.prev_blank && !self.first_content {
+            if self.pending_docblocks.is_empty() && !self.in_docblock {
+                self.result.push('\n');
+            }
+            self.prev_blank = true;
+        }
+    }
+
+    fn absorb_pending(&mut self, trimmed: &str, is_use_import: bool, is_declare: bool) -> bool {
+        let has_pending = !self.pending_docblocks.is_empty() || !self.pending_descriptions.is_empty();
+        if !has_pending {
+            return false;
+        }
+        if extract_docblock_body(trimmed).is_none() && trimmed != "/**" && !is_use_import && !is_declare {
+            if !self.deferred_lines.is_empty() {
+                self.flush_deferred();
+                self.result.push('\n');
+            }
+            self.flush_pending_docblocks();
+            self.prev_was_doc_close = true;
+            self.prev_blank = false;
+            false
+        } else if is_use_import || is_declare {
+            self.deferred_lines.push(trimmed.to_string());
+            self.prev_was_declare = is_declare;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn flush_pending_docblocks(&mut self) {
+        if self.pending_docblocks.is_empty() && self.pending_descriptions.is_empty() {
+            return;
+        }
+        let merged = merge_descriptions_and_vars(&self.pending_descriptions, &self.pending_docblocks);
+        self.fmt
+            .flush_docblocks(&merged, self.pad, &mut self.depth, &mut self.result);
+        self.pending_docblocks.clear();
+        self.pending_descriptions.clear();
+    }
+
+    fn flush_deferred(&mut self) {
+        if self.deferred_lines.is_empty() {
+            return;
+        }
+        emit_deferred_lines(
+            self.fmt,
+            &self.deferred_lines,
+            self.pad,
+            &mut self.depth,
+            &mut self.result,
+        );
+        self.deferred_lines.clear();
+    }
+
+    fn emit_code(&mut self, trimmed: &str) {
+        let formatted = format_php_code(trimmed);
+        let lower_fmt = formatted.to_lowercase();
+        let is_switch_opener = lower_fmt.starts_with("switch") && formatted.ends_with('{');
+        let is_case_label = lower_fmt.starts_with("case ") || lower_fmt.starts_with("default:");
+        let closes_block = formatted.starts_with('}');
+        let case_extra = self.case_extra(is_case_label, closes_block);
+        let fmt = self.fmt;
+        if case_extra > 0 {
+            let case_pad = format!("{}{}", self.pad, fmt.indent.repeat(case_extra));
+            fmt.emit_reindented_line(&formatted, &case_pad, &mut self.depth, &mut self.result);
+        } else {
+            fmt.emit_reindented_line(&formatted, self.pad, &mut self.depth, &mut self.result);
+        }
+        self.update_switch_levels(is_switch_opener, is_case_label, closes_block);
+        if let Some(marker) = detect_heredoc(trimmed) {
+            self.heredoc_marker = Some(marker);
+        } else if has_unclosed_string(trimmed) {
+            self.in_string = detect_open_quote(trimmed);
+        }
+    }
+
+    fn case_extra(&self, is_case_label: bool, closes_block: bool) -> usize {
+        match self.switch_levels.last() {
+            Some(&(label_depth, in_body)) => {
+                let closes_switch = closes_block && self.depth <= label_depth;
+                let label_here = is_case_label && self.depth == label_depth;
+                usize::from(in_body && !closes_switch && !label_here)
+            }
+            None => 0,
+        }
+    }
+
+    fn update_switch_levels(&mut self, is_switch_opener: bool, is_case_label: bool, closes_block: bool) {
+        if is_switch_opener {
+            self.switch_levels.push((self.depth, false));
+        } else if is_case_label {
+            if let Some(entry) = self.switch_levels.last_mut()
+                && self.depth == entry.0
+            {
+                entry.1 = true;
+            }
+        } else if closes_block
+            && let Some(&(label_depth, _)) = self.switch_levels.last()
+            && self.depth < label_depth
+        {
+            self.switch_levels.pop();
+        }
+    }
+
+    fn finish(mut self) -> String {
+        if !self.pending_docblocks.is_empty() || !self.pending_descriptions.is_empty() {
+            if !self.deferred_lines.is_empty() {
+                self.flush_deferred();
+                self.result.push('\n');
+            }
+            self.flush_pending_docblocks();
+        } else if !self.deferred_lines.is_empty() {
+            self.flush_deferred();
+        }
+        let result = self.result.trim_end_matches('\n').to_string() + "\n";
         sort_use_lines(&result)
     }
 }
