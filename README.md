@@ -5,13 +5,13 @@
 
 **⚡ Быстрый форматтер HTML + PHP для view-файлов Yii 2 • Rust 2024 edition**
 
-[![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-94_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-140_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.9.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
+[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
+[![Tests](https://img.shields.io/badge/Tests-94_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-140_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.9.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -49,8 +49,8 @@ phew -w views/site/index.php
 # Файлы из .gitignore и .phewignore пропускаются
 phew -w views/
 
-# Прочитать буфер из stdin и вывести отформатированный в stdout (для редактора по пайпу)
-cat views/site/index.php | phew -
+# Прочитать из stdin, отформатированный вывести в stdout (для интеграции с редактором)
+phew - < views/site/index.php
 ```
 
 ### CI и предпросмотр
@@ -76,6 +76,12 @@ phew -w views/ widgets/ && git add -u
 ```sh
 #!/bin/sh
 phew --check views/ || { echo "Запусти: phew -w views/"; exit 1; }
+```
+
+На больших проектах проверяйте только staged-файлы, чтобы не блокировать коммит из-за чужого кода в соседних файлах:
+
+```sh
+git diff --cached --name-only --diff-filter=d | grep '\.php$' | xargs -r phew --check
 ```
 
 Отладочные режимы:
