@@ -1,5 +1,5 @@
 use super::Formatter;
-use super::indent::visual_len;
+use super::indent::{count_top_level_semicolons, visual_len};
 use super::php::{split_by_args, split_by_commas};
 
 fn byte_offset(chars: &[char], char_index: usize) -> usize {
@@ -161,6 +161,10 @@ impl Formatter {
         }
 
         if let Some(expanded) = self.expand_nested_array(formatted, base_pad) {
+            return Some(expanded);
+        }
+
+        if let Some(expanded) = self.expand_braced_value(formatted, base_pad) {
             return Some(expanded);
         }
 
@@ -899,6 +903,40 @@ impl Formatter {
         Some(result)
     }
 
+    pub(crate) fn expand_braced_value(&self, expr: &str, pad: &str) -> Option<String> {
+        let (open, close) = find_brace_block(expr)?;
+        let chars: Vec<char> = expr.chars().collect();
+        let body: String = chars[open + 1..close].iter().collect();
+        let body = body.trim();
+        if body.is_empty() || count_top_level_semicolons(body) > 0 {
+            return None;
+        }
+        let arms = split_by_commas(body);
+        if arms.len() <= 1 {
+            return None;
+        }
+        let header: String = chars[..open].iter().collect();
+        let header = header.trim_end();
+        let suffix: String = chars[close + 1..].iter().collect();
+        let suffix = suffix.trim();
+        let inner_pad = format!("{pad}{}", self.indent);
+        let mut result = format!("{pad}{header} {{\n");
+        for (idx, arm) in arms.iter().enumerate() {
+            let comma = if idx == arms.len() - 1 { "" } else { "," };
+            if visual_len(&inner_pad) + visual_len(arm) + comma.len() > self.max_line_length
+                && let Some(split) = self.try_split_long_line(arm, &inner_pad)
+            {
+                result.push_str(split.trim_end_matches('\n'));
+                result.push_str(comma);
+                result.push('\n');
+                continue;
+            }
+            result.push_str(&format!("{inner_pad}{arm}{comma}\n"));
+        }
+        result.push_str(&format!("{pad}}}{suffix}\n"));
+        Some(result)
+    }
+
     pub(crate) fn expand_inline_closure(&self, arg: &str, pad: &str) -> Option<String> {
         let (open_brace, close_brace) = find_closure_body(arg)?;
         let chars: Vec<char> = arg.chars().collect();
@@ -966,7 +1004,8 @@ impl Formatter {
         }
         let inner = &value[1..value.len() - 1];
         let items = split_by_commas(inner);
-        if items.len() <= 1 {
+        let single_nested_array = items.len() == 1 && items[0].trim_start().starts_with('[');
+        if items.len() <= 1 && !single_nested_array {
             return None;
         }
         let key = &arg[..skip + arrow_pos + 2];

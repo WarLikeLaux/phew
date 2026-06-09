@@ -86,6 +86,10 @@ fn leaf_fragments() -> impl Strategy<Value = String> {
         Just("<img src=\"pic.png\" alt=\"image\">".to_owned()),
         Just("<input type=\"text\" name=\"field\">".to_owned()),
         Just("<!-- a note -->".to_owned()),
+        Just(
+            "<?php $label = match ($model->type) { 'book' => Yii::t('app', 'ui.book'), 'article' => Yii::t('app', 'ui.article'), 'review' => Yii::t('app', 'ui.review'), default => Yii::t('app', 'ui.unknown') }; ?>"
+                .to_owned(),
+        ),
     ]
 }
 
