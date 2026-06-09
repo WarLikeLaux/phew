@@ -257,7 +257,7 @@ fn is_inline_content(children: &[Node]) -> bool {
     children.iter().all(|c| match c {
         Node::Text(_) | Node::PhpEcho(_) => true,
         Node::PhpBlock(code) => is_single_echo_block(code),
-        _ => false,
+        Node::Element { .. } | Node::Doctype(_) | Node::Comment(_) => false,
     })
 }
 
@@ -289,7 +289,7 @@ fn format_inline_content(children: &[Node]) -> String {
                 let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
                 format!("<?= {} ?>", format_php_code(expr))
             }
-            _ => String::new(),
+            Node::PhpBlock(_) | Node::Element { .. } | Node::Doctype(_) | Node::Comment(_) => String::new(),
         })
         .collect();
     raw.trim().to_string()
@@ -767,7 +767,7 @@ fn render_node_inline(node: &Node) -> String {
                 format_inline(name, attributes, children)
             }
         }
-        _ => String::new(),
+        Node::PhpBlock(_) | Node::Doctype(_) | Node::Comment(_) => String::new(),
     }
 }
 
