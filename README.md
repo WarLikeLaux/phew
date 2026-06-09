@@ -9,8 +9,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-70_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-104_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
+[![Tests](https://img.shields.io/badge/Tests-84_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-118_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
 [![Version](https://img.shields.io/badge/Version-0.7.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
@@ -46,6 +46,7 @@ phew views/site/index.php
 phew -w views/site/index.php
 
 # Отформатировать всю директорию рекурсивно (.php и .html), обход и форматирование параллельны
+# Файлы из .gitignore и .phewignore пропускаются
 phew -w views/
 
 # Прочитать буфер из stdin и вывести отформатированный в stdout (для редактора по пайпу)
@@ -155,7 +156,9 @@ phew --indent-size 2 views/
 - ✅ Inline- и void-элементы, группировка текста + `<?=` на одной строке
 - ✅ Header-блоки: PSR-12 порядок `declare → use → docblock`, сортировка и дедуп `use`, нормализация `@var`, слияние docblock
 - ✅ PHP внутри HTML-атрибутов с вложенными кавычками (`href="<?= "..." ?>"`)
-- ✅ Параллельный рекурсивный обход директорий (`.php`, `.html`), идемпотентность, POSIX EOF
+- ✅ PHP 8.x: `match`, `enum`, named args (`foo(text: ...)`), first-class callable (`strtoupper(...)`)
+- ✅ Параллельный рекурсивный обход директорий (`.php`, `.html`), уважение `.gitignore` и `.phewignore`
+- ✅ Идемпотентность (повторный прогон не меняет вывод), round-trip, POSIX EOF
 - ✅ Режимы для CI и редакторов: `--check` (exit-код), `--diff` (предпросмотр), stdin → stdout (`phew -`)
 
 ## Политика форматирования
@@ -170,7 +173,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**70 unit-тестов** и **104 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`). Полная проверка перед коммитом:
+**84 unit-теста**, **118 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures
