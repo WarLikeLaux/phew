@@ -24,18 +24,30 @@ fn is_verbatim_element(name: &str) -> bool {
     VERBATIM_ELEMENTS.contains(&name.to_lowercase().as_str())
 }
 
+fn leading_whitespace_len(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
 fn push_raw_text_lines(s: &str, pad: &str, output: &mut String) {
-    let trimmed = s.trim_start_matches('\n').trim_end();
-    if trimmed.is_empty() {
+    let lines: Vec<&str> = s.lines().collect();
+    let Some(start) = lines.iter().position(|line| !line.trim().is_empty()) else {
         return;
-    }
-    for line in trimmed.lines() {
-        if line.chars().next().is_some_and(char::is_whitespace) {
-            output.push_str(line);
-        } else {
-            output.push_str(pad);
-            output.push_str(line);
+    };
+    let end = lines.iter().rposition(|line| !line.trim().is_empty()).unwrap_or(start);
+    let body = &lines[start..=end];
+    let min_indent = body
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| leading_whitespace_len(line))
+        .min()
+        .unwrap_or(0);
+    for line in body {
+        if line.trim().is_empty() {
+            output.push('\n');
+            continue;
         }
+        output.push_str(pad);
+        output.push_str(line.get(min_indent..).unwrap_or("").trim_end());
         output.push('\n');
     }
 }
@@ -146,10 +158,11 @@ impl Formatter {
     ) {
         let (depth, output) = ctx;
         let pad = self.indent.repeat(depth);
+        let content_pad = self.indent.repeat(depth + 1);
         self.emit_open_tag(name, attributes, &pad, output);
         for child in children {
             if let Node::Text(s) = child {
-                push_raw_text_lines(s, &pad, output);
+                push_raw_text_lines(s, &content_pad, output);
             }
         }
         output.push_str(&format!("{pad}</{name}>\n"));
