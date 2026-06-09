@@ -124,31 +124,38 @@ phew --indent-size 2 views/
 
 ## Пример
 
-**До:**
+**До:** (всё в одну строку, без пробелов, смешанные кавычки)
 ```php
-<div class="site-index">
-<?php if($model->isActive):?>
-<h1><?= Html::encode( $model->title ) ?></h1>
-    <?php foreach($model->items as $item):?>
-  <div class="item">
-        <?= Html::a($item->name,['item/view','id'=>$item->id],['class'=>'btn btn-primary']) ?>
-      </div>
-<?php endforeach;?>
-    <?php endif;?>
+<div class="catalog">
+<?php $form=ActiveForm::begin(['options'=>['data-config'=>'{"ajax":true,"perPage":20}']]);?>
+<?=$form->field($model,'category')->dropDownList($categories,['prompt'=>Yii::t('app','Выберите категорию товара')])?>
+<?=GridView::widget(['dataProvider'=>$dataProvider,'columns'=>['id',['attribute'=>'type','value'=>fn($m)=>match($m->type){'book'=>Yii::t('app','Книга'),'article'=>Yii::t('app','Статья'),default=>Yii::t('app','Неизвестно')}],['class'=>ActionColumn::class]]])?>
+<?php ActiveForm::end();?>
 </div>
 ```
 
 **После:**
 ```php
-<div class="site-index">
-    <?php if ($model->isActive): ?>
-        <h1><?= Html::encode($model->title) ?></h1>
-        <?php foreach ($model->items as $item): ?>
-            <div class="item">
-                <?= Html::a($item->name, ['item/view', 'id' => $item->id], ['class' => 'btn btn-primary']) ?>
-            </div>
-        <?php endforeach; ?>
-    <?php endif; ?>
+<div class="catalog">
+    <?php $form = ActiveForm::begin(['options' => ['data-config' => '{"ajax":true,"perPage":20}']]); ?>
+        <?= $form->field($model, 'category')
+            ->dropDownList($categories, ['prompt' => Yii::t('app', 'Выберите категорию товара')]) ?>
+        <?= GridView::widget([
+            'dataProvider' => $dataProvider,
+            'columns' => [
+                'id',
+                [
+                    'attribute' => 'type',
+                    'value' => fn ($m) => match ($m->type) {
+                        'book' => Yii::t('app', 'Книга'),
+                        'article' => Yii::t('app', 'Статья'),
+                        default => Yii::t('app', 'Неизвестно'),
+                    },
+                ],
+                ['class' => ActionColumn::class],
+            ],
+        ]) ?>
+    <?php ActiveForm::end(); ?>
 </div>
 ```
 
