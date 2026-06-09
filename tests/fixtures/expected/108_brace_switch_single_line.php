@@ -1,5 +1,5 @@
 <?php switch ($status) {
     case 1: echo "active";
-    break;
+        break;
     default: echo "unknown";
 } ?>

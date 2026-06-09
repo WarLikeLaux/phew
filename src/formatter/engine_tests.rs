@@ -203,7 +203,7 @@ fn single_line_brace_switch_is_idempotent() {
     let expected = "\
 <?php switch ($x) {
     case 1: echo \"a\";
-    break;
+        break;
     default: echo \"d\";
 } ?>
 ";

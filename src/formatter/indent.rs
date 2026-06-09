@@ -611,6 +611,7 @@ impl Formatter {
         };
         let mut result = String::new();
         let mut depth: i32 = 0;
+        let mut switch_levels: Vec<(i32, bool)> = Vec::new();
         let mut prev_blank = false;
         let mut first_content = true;
         let mut prev_was_doc_close = false;
@@ -758,7 +759,38 @@ impl Formatter {
             }
 
             let formatted = format_php_code(trimmed);
-            self.emit_reindented_line(&formatted, pad, &mut depth, &mut result);
+            let lower_fmt = formatted.to_lowercase();
+            let is_switch_opener = lower_fmt.starts_with("switch") && formatted.ends_with('{');
+            let is_case_label = lower_fmt.starts_with("case ") || lower_fmt.starts_with("default:");
+            let closes_block = formatted.starts_with('}');
+            let case_extra = match switch_levels.last() {
+                Some(&(label_depth, in_body)) => {
+                    let closes_switch = closes_block && depth <= label_depth;
+                    let label_here = is_case_label && depth == label_depth;
+                    usize::from(in_body && !closes_switch && !label_here)
+                }
+                None => 0,
+            };
+            if case_extra > 0 {
+                let case_pad = format!("{pad}{}", self.indent.repeat(case_extra));
+                self.emit_reindented_line(&formatted, &case_pad, &mut depth, &mut result);
+            } else {
+                self.emit_reindented_line(&formatted, pad, &mut depth, &mut result);
+            }
+            if is_switch_opener {
+                switch_levels.push((depth, false));
+            } else if is_case_label {
+                if let Some(entry) = switch_levels.last_mut()
+                    && depth == entry.0
+                {
+                    entry.1 = true;
+                }
+            } else if closes_block
+                && let Some(&(label_depth, _)) = switch_levels.last()
+                && depth < label_depth
+            {
+                switch_levels.pop();
+            }
             if let Some(marker) = detect_heredoc(trimmed) {
                 heredoc_marker = Some(marker);
             } else if has_unclosed_string(trimmed) {
