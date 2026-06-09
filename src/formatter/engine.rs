@@ -651,21 +651,89 @@ fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
     }
 }
 
+fn render_inline_run(nodes: &[Node]) -> String {
+    nodes
+        .iter()
+        .map(render_node_inline)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+fn is_echo_like(node: &Node) -> bool {
+    matches!(node, Node::PhpEcho(_)) || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
+}
+
+fn is_inline_atom(node: &Node) -> bool {
+    is_echo_like(node) || is_inline_element_node(node)
+}
+
+fn line_reparses_as_run(nodes: &[Node]) -> bool {
+    if nodes.len() == 1 {
+        return true;
+    }
+    let has_echo = nodes.iter().any(is_echo_like);
+    let has_anchor = nodes
+        .iter()
+        .any(|node| matches!(node, Node::Text(s) if !s.trim().is_empty()) || is_inline_element_node(node));
+    has_echo && has_anchor
+}
+
+fn inline_segments(nodes: &[Node]) -> Vec<usize> {
+    let mut bounds = Vec::new();
+    for (idx, node) in nodes.iter().enumerate() {
+        if is_inline_atom(node) {
+            bounds.push(idx + 1);
+        }
+    }
+    if bounds.last() != Some(&nodes.len()) {
+        bounds.push(nodes.len());
+    }
+    bounds
+}
+
 impl Formatter {
+    fn inline_run_fits(&self, nodes: &[Node], pad: &str) -> bool {
+        visual_len(pad) + visual_len(&render_inline_run(nodes)) <= self.max_line_length
+    }
+
     fn emit_inline_run(&self, nodes: &[Node], pad: &str, depth: usize, output: &mut String) {
-        let raw: String = nodes.iter().map(render_node_inline).collect();
-        let content = raw.trim().to_string();
+        let content = render_inline_run(nodes);
         if content.is_empty() {
             return;
         }
-        let line = format!("{pad}{content}");
-        if visual_len(&line) <= self.max_line_length {
-            output.push_str(&line);
+        if visual_len(pad) + visual_len(&content) <= self.max_line_length {
+            output.push_str(pad);
+            output.push_str(&content);
             output.push('\n');
-        } else {
-            for node in nodes {
-                self.format_nodes(std::slice::from_ref(node), depth, output);
+            return;
+        }
+
+        let bounds = inline_segments(nodes);
+        let mut line_start = 0;
+        let mut line_end = bounds[0];
+        for &seg_end in &bounds[1..] {
+            let candidate = &nodes[line_start..seg_end];
+            if self.inline_run_fits(candidate, pad) && line_reparses_as_run(candidate) {
+                line_end = seg_end;
+            } else {
+                self.emit_inline_line(&nodes[line_start..line_end], pad, depth, output);
+                line_start = line_end;
+                line_end = seg_end;
             }
+        }
+        self.emit_inline_line(&nodes[line_start..line_end], pad, depth, output);
+    }
+
+    fn emit_inline_line(&self, nodes: &[Node], pad: &str, depth: usize, output: &mut String) {
+        if nodes.len() > 1 && self.inline_run_fits(nodes, pad) && line_reparses_as_run(nodes) {
+            output.push_str(pad);
+            output.push_str(&render_inline_run(nodes));
+            output.push('\n');
+            return;
+        }
+        for node in nodes {
+            self.format_nodes(std::slice::from_ref(node), depth, output);
         }
     }
 }

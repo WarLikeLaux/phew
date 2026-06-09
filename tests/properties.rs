@@ -86,8 +86,13 @@ fn leaf_fragments() -> impl Strategy<Value = String> {
         Just("<img src=\"pic.png\" alt=\"image\">".to_owned()),
         Just("<input type=\"text\" name=\"field\">".to_owned()),
         Just("<!-- a note -->".to_owned()),
+        Just("<?= match ($status) { 'a' => 'active', 'b' => 'blocked', default => 'unknown' } ?>".to_owned()),
         Just(
             "<?php $label = match ($model->type) { 'book' => Yii::t('app', 'ui.book'), 'article' => Yii::t('app', 'ui.article'), 'review' => Yii::t('app', 'ui.review'), default => Yii::t('app', 'ui.unknown') }; ?>"
+                .to_owned(),
+        ),
+        Just(
+            "<?= GridView::widget(['dataProvider' => $provider, 'columns' => [['attribute' => 'type', 'value' => static fn ($m) => match ($m->type) { 'book' => Yii::t('app', 'ui.book'), default => Yii::t('app', 'ui.other') }]]]) ?>"
                 .to_owned(),
         ),
     ]
