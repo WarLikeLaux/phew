@@ -165,61 +165,70 @@ impl Formatter {
             self.emit_raw_text_element(name, attributes, children, (depth, output));
             return;
         }
-        let indent = &self.indent;
-        let pad = indent.repeat(depth);
-        if children.is_empty() && is_void_element(name) {
-            self.emit_open_tag(name, attributes, &pad, output);
-        } else if children.is_empty()
+        let pad = self.indent.repeat(depth);
+        let is_empty = children.is_empty()
             || children
                 .iter()
-                .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()))
-        {
-            let attrs = format_attributes(attributes);
-            let inline_tag = format!("{pad}<{name}{attrs}></{name}>");
-            if visual_len(&inline_tag) <= self.max_line_length {
-                output.push_str(&inline_tag);
-                output.push('\n');
-            } else {
-                self.emit_open_tag(name, attributes, &pad, output);
-                output.push_str(&format!("{pad}</{name}>\n"));
-            }
-        } else if is_inline_content(children)
-            && (!is_block_element(name)
-                || children
-                    .iter()
-                    .filter(|c| matches!(c, Node::PhpEcho(_) | Node::PhpBlock(_)))
-                    .count()
-                    <= 1)
-        {
-            let inline = format_inline(name, attributes, children);
-            if visual_len(&pad) + visual_len(&inline) <= self.max_line_length {
-                output.push_str(&pad);
-                output.push_str(&inline);
-                output.push('\n');
-            } else {
-                let content = format_inline_content(children);
-                let inner_pad = format!("{pad}{indent}");
-                let content_line = format!("{inner_pad}{content}");
-                let has_text = children
-                    .iter()
-                    .any(|c| matches!(c, Node::Text(s) if !s.trim().is_empty()));
-                if visual_len(&content_line) <= self.max_line_length || (!is_block_element(name) && has_text) {
-                    self.emit_open_tag(name, attributes, &pad, output);
-                    output.push_str(&content_line);
-                    output.push('\n');
-                    output.push_str(&format!("{pad}</{name}>\n"));
-                } else {
-                    self.emit_open_tag(name, attributes, &pad, output);
-                    self.format_nodes(children, depth + 1, output);
-                    output.push_str(&format!("{pad}</{name}>\n"));
-                }
-            }
+                .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()));
+        if children.is_empty() && is_void_element(name) {
+            self.emit_open_tag(name, attributes, &pad, output);
+        } else if is_empty {
+            self.emit_empty_element(name, attributes, &pad, output);
+        } else if is_inline_content(children) && fits_inline_element(name, children) {
+            self.emit_inline_element(name, attributes, children, (depth, output));
         } else {
             self.emit_open_tag(name, attributes, &pad, output);
             self.format_nodes(children, depth + 1, output);
             output.push_str(&format!("{pad}</{name}>\n"));
         }
     }
+
+    fn emit_empty_element(&self, name: &str, attributes: &[Attribute], pad: &str, output: &mut String) {
+        let attrs = format_attributes(attributes);
+        let inline_tag = format!("{pad}<{name}{attrs}></{name}>");
+        if visual_len(&inline_tag) <= self.max_line_length {
+            output.push_str(&inline_tag);
+            output.push('\n');
+        } else {
+            self.emit_open_tag(name, attributes, pad, output);
+            output.push_str(&format!("{pad}</{name}>\n"));
+        }
+    }
+
+    fn emit_inline_element(&self, name: &str, attributes: &[Attribute], children: &[Node], ctx: (usize, &mut String)) {
+        let (depth, output) = ctx;
+        let pad = self.indent.repeat(depth);
+        let inline = format_inline(name, attributes, children);
+        if visual_len(&pad) + visual_len(&inline) <= self.max_line_length {
+            output.push_str(&pad);
+            output.push_str(&inline);
+            output.push('\n');
+            return;
+        }
+        let content = format_inline_content(children);
+        let inner_pad = format!("{pad}{}", self.indent);
+        let content_line = format!("{inner_pad}{content}");
+        let has_text = children
+            .iter()
+            .any(|c| matches!(c, Node::Text(s) if !s.trim().is_empty()));
+        self.emit_open_tag(name, attributes, &pad, output);
+        if visual_len(&content_line) <= self.max_line_length || (!is_block_element(name) && has_text) {
+            output.push_str(&content_line);
+            output.push('\n');
+        } else {
+            self.format_nodes(children, depth + 1, output);
+        }
+        output.push_str(&format!("{pad}</{name}>\n"));
+    }
+}
+
+fn fits_inline_element(name: &str, children: &[Node]) -> bool {
+    !is_block_element(name)
+        || children
+            .iter()
+            .filter(|c| matches!(c, Node::PhpEcho(_) | Node::PhpBlock(_)))
+            .count()
+            <= 1
 }
 
 const INLINE_ELEMENTS: &[&str] = &[
