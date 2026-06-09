@@ -9,8 +9,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-94_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-140_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
+[![Tests](https://img.shields.io/badge/Tests-116_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-169_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
 [![Version](https://img.shields.io/badge/Version-0.9.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
@@ -165,8 +165,9 @@ phew --indent-size 2 views/
 - **Разбивка длинных строк** (≤120) — аргументы, цепочки `->`, массивы, тернарники, `match`
 - **Yii 2** — виджеты (`GridView`, `ActiveForm`, `Nav`…), `::begin()`/`::end()`, PHP внутри атрибутов
 - **Header-блоки** — PSR-12 порядок `declare → use → docblock`, сортировка/дедуп `use`, `@var`
-- **PHP 8.x** — `match`, `enum`, named args, first-class callable
-- **Надёжность** — идемпотентность, round-trip, `.gitignore`/`.phewignore`, параллельный обход
+- **PSR-12 для объявлений** — Allman-брейсы у `class`/`interface`/`trait`/`enum`/`function` (в том числе за атрибутами `#[...]`), развёртка тел методов
+- **PHP 8.x** — `match`, `enum`, named args, first-class callable, атрибуты, heredoc/nowdoc
+- **Надёжность** — идемпотентность, round-trip, `.gitignore`/`.phewignore`, BOM/CRLF на входе, параллельный обход
 - **CI и редакторы** — `--check`, `--diff`, stdin → stdout
 
 Известные ограничения — в [`docs/known-issues.md`](docs/known-issues.md).
@@ -183,7 +184,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**94 unit-теста**, **140 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
+**116 unit-тестов**, **169 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures
