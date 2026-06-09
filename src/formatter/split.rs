@@ -113,7 +113,10 @@ impl Formatter {
         if visual_len(base_pad) + visual_len(formatted) <= self.max_line_length && !has_expandable_closure(formatted) {
             return None;
         }
+        self.split_long_line(formatted, base_pad)
+    }
 
+    pub(crate) fn split_long_line(&self, formatted: &str, base_pad: &str) -> Option<String> {
         if let Some(split) = self.split_long_by_commas(formatted, base_pad) {
             return Some(split);
         }

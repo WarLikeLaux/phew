@@ -1,11 +1,42 @@
 use super::Formatter;
 use super::indent::{contains_outside_strings, visual_len};
-use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
-use super::split::{find_ternary_positions, has_expandable_closure};
+use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_commas, split_by_concat};
+use super::split::{find_array_arrow, find_matching_close, find_ternary_positions, has_expandable_closure};
+
+const WIDGET_MARKER: &str = "::widget(";
 
 pub fn is_single_echo_block(code: &str) -> bool {
     let trimmed = code.trim();
     trimmed.starts_with("echo ") && !trimmed.contains('\n') && trimmed.matches(';').count() <= 1
+}
+
+fn widget_config_is_structural(body: &str) -> bool {
+    if has_expandable_closure(body) {
+        return true;
+    }
+    split_by_commas(body).iter().any(|item| {
+        find_array_arrow(item)
+            .map(|(skip, arrow)| item[skip + arrow + 2..].trim_start().starts_with('['))
+            .unwrap_or(false)
+    })
+}
+
+fn is_structural_widget(code: &str) -> bool {
+    let chars: Vec<char> = code.chars().collect();
+    let marker: Vec<char> = WIDGET_MARKER.chars().collect();
+    let Some(start) = chars.windows(marker.len()).position(|w| w == marker.as_slice()) else {
+        return false;
+    };
+    let open = start + marker.len() - 1;
+    let Some(close) = find_matching_close(&chars, open) else {
+        return false;
+    };
+    let inner: String = chars[open + 1..close].iter().collect();
+    let inner = inner.trim();
+    let Some(body) = inner.strip_prefix('[').and_then(|s| s.strip_suffix(']')) else {
+        return false;
+    };
+    widget_config_is_structural(body)
 }
 
 pub fn is_echo_block_opener(code: &str) -> bool {
@@ -66,7 +97,8 @@ impl Formatter {
         let combined = format!("{formatted} ?>");
         let single = format!("{pad}<?= {combined}");
 
-        if visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted) {
+        let fits = visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted);
+        if fits && !is_structural_widget(&formatted) {
             return format!("{single}\n");
         }
 
@@ -119,7 +151,7 @@ impl Formatter {
             return result;
         }
 
-        if let Some(split) = self.try_split_long_line(&formatted, pad) {
+        if let Some(split) = self.split_long_line(&formatted, pad) {
             let trimmed = split.trim_start().trim_end_matches('\n');
             return format!("{pad}<?= {trimmed} ?>\n");
         }
