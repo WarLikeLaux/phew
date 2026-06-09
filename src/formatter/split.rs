@@ -220,74 +220,72 @@ impl Formatter {
         let mut result = String::new();
         let prefix_trimmed = prefix.trim();
 
+        self.emit_split_prefix(prefix_trimmed, pad, &mut result);
+        for arg in args {
+            result.push_str(&self.format_split_arg(arg, &inner_pad));
+        }
+        self.emit_split_suffix(prefix_trimmed, suffix, pad, &mut result);
+        result
+    }
+
+    fn emit_split_prefix(&self, prefix_trimmed: &str, pad: &str, result: &mut String) {
         if visual_len(pad) + visual_len(prefix_trimmed) > self.max_line_length {
             let mut prefix_parts = split_by_commas(prefix_trimmed);
             if prefix_parts.len() > 1 {
                 let last = prefix_parts.pop().unwrap_or_default();
                 for part in prefix_parts {
-                    let mut line = part.trim().to_string();
-                    line.push(',');
-                    result.push_str(&format!("{pad}{line}\n"));
+                    result.push_str(&format!("{pad}{},\n", part.trim()));
                 }
                 result.push_str(&format!("{pad}{}\n", last.trim()));
-            } else {
-                result.push_str(&format!("{pad}{prefix_trimmed}\n"));
+                return;
             }
-        } else {
-            result.push_str(&format!("{pad}{prefix_trimmed}\n"));
         }
+        result.push_str(&format!("{pad}{prefix_trimmed}\n"));
+    }
 
-        for arg in args {
-            let line_len = inner_pad.len() + arg.len() + 1;
-            if line_len > self.max_line_length {
-                if let Some(expanded) = self.expand_nested_array(arg, &inner_pad) {
-                    result.push_str(&expanded);
-                    continue;
-                }
-                if let Some(expanded) = self.expand_bare_array(arg, &inner_pad) {
-                    result.push_str(&expanded);
-                    continue;
-                }
-                if let Some(expanded) = self.expand_inline_closure(arg, &inner_pad) {
-                    result.push_str(&expanded);
-                    continue;
-                }
-                if let Some(split) = self.try_split_long_line(arg, &inner_pad) {
-                    let trimmed = split.trim_end_matches('\n');
-                    result.push_str(trimmed);
-                    result.push_str(",\n");
-                    continue;
-                }
+    fn format_split_arg(&self, arg: &str, inner_pad: &str) -> String {
+        let line_len = inner_pad.len() + arg.len() + 1;
+        if line_len > self.max_line_length {
+            if let Some(expanded) = self.expand_nested_array(arg, inner_pad) {
+                return expanded;
             }
-            if let Some(expanded) = self.expand_bare_array(arg, &inner_pad) {
-                result.push_str(&expanded);
-                continue;
+            if let Some(expanded) = self.expand_bare_array(arg, inner_pad) {
+                return expanded;
             }
-            if let Some(expanded) = self.expand_closure_element(arg, &inner_pad) {
-                result.push_str(&expanded);
-                continue;
+            if let Some(expanded) = self.expand_inline_closure(arg, inner_pad) {
+                return expanded;
             }
-            if let Some(expanded) = self.expand_list_value(arg, &inner_pad) {
-                result.push_str(&expanded);
-                continue;
+            if let Some(split) = self.try_split_long_line(arg, inner_pad) {
+                return format!("{},\n", split.trim_end_matches('\n'));
             }
-            result.push_str(&format!("{inner_pad}{arg},\n"));
         }
+        if let Some(expanded) = self.expand_bare_array(arg, inner_pad) {
+            return expanded;
+        }
+        if let Some(expanded) = self.expand_closure_element(arg, inner_pad) {
+            return expanded;
+        }
+        if let Some(expanded) = self.expand_list_value(arg, inner_pad) {
+            return expanded;
+        }
+        format!("{inner_pad}{arg},\n")
+    }
+
+    fn emit_split_suffix(&self, prefix_trimmed: &str, suffix: &str, pad: &str, result: &mut String) {
         let suffix_trimmed = suffix.trim();
         let initial_depth = bracket_balance(prefix_trimmed);
         let split_depth = initial_depth - count_leading_closers(suffix_trimmed) as i32;
         if let Some(split) = self.split_long_by_commas_from_depth(suffix_trimmed, pad, initial_depth, split_depth) {
             result.push_str(&split);
-            return result;
+            return;
         }
         if visual_len(pad) + visual_len(suffix_trimmed) > self.max_line_length {
             if let Some(split) = self.try_split_long_line(suffix_trimmed, pad) {
                 result.push_str(&split);
-                return result;
+                return;
             }
         }
         result.push_str(&format!("{pad}{suffix_trimmed}\n"));
-        result
     }
 
     fn split_long_by_commas(&self, formatted: &str, pad: &str) -> Option<String> {
@@ -375,7 +373,6 @@ impl Formatter {
     }
 
     pub(crate) fn expand_bare_array(&self, arg: &str, pad: &str) -> Option<String> {
-        let indent = &self.indent;
         let trimmed = arg.trim();
         if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
             return None;
@@ -383,66 +380,75 @@ impl Formatter {
         let inner = &trimmed[1..trimmed.len() - 1];
         let items = split_by_commas(inner);
         if items.len() <= 1 {
-            if items.len() == 1 {
-                let item = &items[0];
-                let nested_pad = format!("{pad}{indent}");
-                let item_line_len = nested_pad.len() + item.len() + 1;
-                if item_line_len > self.max_line_length || has_expandable_closure(item) {
-                    let mut result = format!("{pad}[\n");
-                    if let Some(expanded) = self.expand_nested_array(item, &nested_pad) {
-                        result.push_str(&expanded);
-                    } else if let Some(expanded) = self.expand_bare_sub_array(item, &nested_pad) {
-                        result.push_str(&expanded);
-                    } else if let Some(expanded) = self.expand_inline_closure(item, &nested_pad) {
-                        result.push_str(&expanded);
-                    } else if let Some(split) = self.try_split_long_line(item, &nested_pad) {
-                        let trimmed = split.trim_end_matches('\n');
-                        result.push_str(trimmed);
-                        result.push_str(",\n");
-                    } else {
-                        result.push_str(&format!("{nested_pad}{item},\n"));
-                    }
-                    result.push_str(&format!("{pad}],\n"));
-                    return Some(result);
-                }
-            }
-            return None;
+            return self.expand_singleton_array(&items, pad);
         }
-        let nested_pad = format!("{pad}{indent}");
+        let nested_pad = format!("{pad}{}", self.indent);
         let mut result = format!("{pad}[\n");
         for item in &items {
-            let item_line_len = nested_pad.len() + item.len() + 1;
-            if item_line_len > self.max_line_length {
-                if let Some(expanded) = self.expand_nested_array(item, &nested_pad) {
-                    result.push_str(&expanded);
-                    continue;
-                }
-            }
-            if item.starts_with('[') && item.ends_with(']') {
-                let sub_inner = &item[1..item.len() - 1];
-                let sub_items = split_by_commas(sub_inner);
-                if sub_items.len() > 1 {
-                    let deeper_pad = format!("{nested_pad}{indent}");
-                    result.push_str(&format!("{nested_pad}[\n"));
-                    for sub in &sub_items {
-                        if let Some(expanded) = self.expand_inline_closure(sub, &deeper_pad) {
-                            result.push_str(&expanded);
-                            continue;
-                        }
-                        result.push_str(&format!("{deeper_pad}{sub},\n"));
-                    }
-                    result.push_str(&format!("{nested_pad}],\n"));
-                    continue;
-                }
-            }
-            if let Some(expanded) = self.expand_closure_element(item, &nested_pad) {
-                result.push_str(&expanded);
-                continue;
-            }
+            result.push_str(&self.format_bare_array_item(item, &nested_pad));
+        }
+        result.push_str(&format!("{pad}],\n"));
+        Some(result)
+    }
+
+    fn expand_singleton_array(&self, items: &[String], pad: &str) -> Option<String> {
+        if items.len() != 1 {
+            return None;
+        }
+        let item = &items[0];
+        let nested_pad = format!("{pad}{}", self.indent);
+        let item_line_len = nested_pad.len() + item.len() + 1;
+        if item_line_len <= self.max_line_length && !has_expandable_closure(item) {
+            return None;
+        }
+        let mut result = format!("{pad}[\n");
+        if let Some(expanded) = self.expand_nested_array(item, &nested_pad) {
+            result.push_str(&expanded);
+        } else if let Some(expanded) = self.expand_bare_sub_array(item, &nested_pad) {
+            result.push_str(&expanded);
+        } else if let Some(expanded) = self.expand_inline_closure(item, &nested_pad) {
+            result.push_str(&expanded);
+        } else if let Some(split) = self.try_split_long_line(item, &nested_pad) {
+            result.push_str(split.trim_end_matches('\n'));
+            result.push_str(",\n");
+        } else {
             result.push_str(&format!("{nested_pad}{item},\n"));
         }
         result.push_str(&format!("{pad}],\n"));
         Some(result)
+    }
+
+    fn format_bare_array_item(&self, item: &str, nested_pad: &str) -> String {
+        let item_line_len = nested_pad.len() + item.len() + 1;
+        if item_line_len > self.max_line_length
+            && let Some(expanded) = self.expand_nested_array(item, nested_pad)
+        {
+            return expanded;
+        }
+        if item.starts_with('[') && item.ends_with(']') {
+            let sub_items = split_by_commas(&item[1..item.len() - 1]);
+            if sub_items.len() > 1 {
+                return self.format_bare_sub_array_inline(&sub_items, nested_pad);
+            }
+        }
+        if let Some(expanded) = self.expand_closure_element(item, nested_pad) {
+            return expanded;
+        }
+        format!("{nested_pad}{item},\n")
+    }
+
+    fn format_bare_sub_array_inline(&self, sub_items: &[String], nested_pad: &str) -> String {
+        let deeper_pad = format!("{nested_pad}{}", self.indent);
+        let mut result = format!("{nested_pad}[\n");
+        for sub in sub_items {
+            if let Some(expanded) = self.expand_inline_closure(sub, &deeper_pad) {
+                result.push_str(&expanded);
+                continue;
+            }
+            result.push_str(&format!("{deeper_pad}{sub},\n"));
+        }
+        result.push_str(&format!("{nested_pad}],\n"));
+        result
     }
 
     pub(crate) fn expand_bare_sub_array(&self, item: &str, pad: &str) -> Option<String> {
