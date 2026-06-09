@@ -172,54 +172,23 @@ fn next_non_ws(chars: &[char], pos: usize) -> Option<char> {
 
 pub(crate) fn find_top_level_assignment_equal(code: &str) -> Option<usize> {
     let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-    let mut depth = 0i32;
+    PhpCursor::new(&chars)
+        .filter(|s| s.ch == '=' && s.depth == 0)
+        .find(|s| is_assignment_equal(&chars, s.index))
+        .map(|s| byte_offset(&chars, s.index))
+}
 
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-            i += 1;
-            continue;
-        }
-
-        if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-            i += 1;
-            continue;
-        }
-        if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-            i += 1;
-            continue;
-        }
-
-        if ch == '=' && depth == 0 {
-            let prev = prev_non_ws(&chars, i);
-            let next = next_non_ws(&chars, i);
-            let is_non_assignment = next.is_some_and(|c| c == '=' || c == '>')
-                || prev.is_some_and(|c| {
-                    matches!(
-                        c,
-                        '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '.' | '&' | '|' | '^' | '?'
-                    )
-                });
-            if !is_non_assignment {
-                return Some(byte_offset(&chars, i));
-            }
-        }
-
-        i += 1;
-    }
-
-    None
+fn is_assignment_equal(chars: &[char], pos: usize) -> bool {
+    let prev = prev_non_ws(chars, pos);
+    let next = next_non_ws(chars, pos);
+    let is_non_assignment = next.is_some_and(|c| c == '=' || c == '>')
+        || prev.is_some_and(|c| {
+            matches!(
+                c,
+                '=' | '!' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '.' | '&' | '|' | '^' | '?'
+            )
+        });
+    !is_non_assignment
 }
 
 pub fn split_by_commas(code: &str) -> Vec<String> {
