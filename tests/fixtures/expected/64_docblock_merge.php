@@ -16,7 +16,8 @@ use yii\helpers\Html;
 <?php if ($count > 0): ?>
     <div class="content">
         <h1><?= Html::encode($title) ?></h1>
-        <?php /**
+        <?php
+        /**
          * @var Item $item
          * @var Category $category
          */

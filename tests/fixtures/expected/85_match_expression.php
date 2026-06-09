@@ -7,7 +7,12 @@
 }; ?>
 <div class="status">
     <span
-        class="badge bg-<?= match ($model->status) { 'active' => 'success', 'inactive' => 'secondary', 'pending' => 'warning', default => 'dark' } ?>"
+        class="badge bg-<?= match ($model->status) {
+            'active' => 'success',
+            'inactive' => 'secondary',
+            'pending' => 'warning',
+            default => 'dark',
+        } ?>"
     >
         <?= $statusText ?>
     </span>

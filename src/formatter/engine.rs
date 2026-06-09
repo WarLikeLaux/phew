@@ -71,15 +71,80 @@ fn has_literal_quote(value: &str, quote: char) -> bool {
     false
 }
 
+fn attr_quote(value: &str) -> char {
+    if has_literal_quote(value, '"') && !has_literal_quote(value, '\'') {
+        '\''
+    } else {
+        '"'
+    }
+}
+
+fn normalize_php_segment(seg: &str) -> String {
+    let Some(inner) = seg.strip_suffix("?>") else {
+        return seg.to_string();
+    };
+    if let Some(rest) = inner.strip_prefix("<?=") {
+        format!("<?= {} ?>", format_php_code(&join_php_lines(rest.trim())))
+    } else if let Some(rest) = inner.strip_prefix("<?php") {
+        format!("<?php {} ?>", format_php_code(&join_php_lines(rest.trim())))
+    } else {
+        seg.to_string()
+    }
+}
+
+fn normalize_attr_value(value: &str) -> String {
+    if !value.contains("<?") {
+        return value.to_string();
+    }
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(start) = rest.find("<?") {
+        out.push_str(&rest[..start]);
+        let after = &rest[start..];
+        let Some(close) = after.find("?>") else {
+            out.push_str(after);
+            return out;
+        };
+        out.push_str(&normalize_php_segment(&after[..close + 2]));
+        rest = &after[close + 2..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn single_php_segment(value: &str) -> Option<(String, bool, String, String)> {
+    let start = value.find("<?")?;
+    let after = &value[start..];
+    let is_echo = after.starts_with("<?=");
+    let is_php = after.starts_with("<?php");
+    if !is_echo && !is_php {
+        return None;
+    }
+    let close = after.find("?>")?;
+    let suffix = &after[close + 2..];
+    if suffix.contains("<?") {
+        return None;
+    }
+    let inner = &after[..close];
+    let code = if is_echo {
+        inner.strip_prefix("<?=")?.trim()
+    } else {
+        inner.strip_prefix("<?php")?.trim()
+    };
+    Some((
+        value[..start].to_string(),
+        is_echo,
+        code.to_string(),
+        suffix.to_string(),
+    ))
+}
+
 fn format_attribute(attr: &Attribute) -> String {
     let Some(value) = &attr.value else {
         return attr.name.clone();
     };
-    let quote = if has_literal_quote(value, '"') && !has_literal_quote(value, '\'') {
-        '\''
-    } else {
-        '"'
-    };
+    let value = normalize_attr_value(value);
+    let quote = attr_quote(&value);
     format!("{}={quote}{value}{quote}", attr.name)
 }
 
@@ -98,11 +163,43 @@ impl Formatter {
         output.push_str(&format!("{pad}<{name}\n"));
         let attr_pad = format!("{pad}{indent}");
         for attr in attributes {
-            output.push_str(&attr_pad);
-            output.push_str(&format_attribute(attr));
-            output.push('\n');
+            let line = format!("{attr_pad}{}", format_attribute(attr));
+            if visual_len(&line) <= self.max_line_length || !self.emit_attribute_split(attr, &attr_pad, output) {
+                output.push_str(&line);
+                output.push('\n');
+            }
         }
         output.push_str(&format!("{pad}>\n"));
+    }
+
+    fn emit_attribute_split(&self, attr: &Attribute, attr_pad: &str, output: &mut String) -> bool {
+        let Some(raw) = &attr.value else {
+            return false;
+        };
+        let value = normalize_attr_value(raw);
+        let Some((prefix, is_echo, code, suffix)) = single_php_segment(&value) else {
+            return false;
+        };
+        let Some(split) = self.try_split_long_line(&code, attr_pad) else {
+            return false;
+        };
+        let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() < 2 {
+            return false;
+        }
+        let quote = attr_quote(&value);
+        let open = if is_echo { "<?=" } else { "<?php" };
+        output.push_str(&format!(
+            "{attr_pad}{}={quote}{prefix}{open} {}\n",
+            attr.name,
+            lines[0].trim_start()
+        ));
+        for line in &lines[1..lines.len() - 1] {
+            output.push_str(line);
+            output.push('\n');
+        }
+        output.push_str(&format!("{} ?>{suffix}{quote}\n", lines[lines.len() - 1]));
+        true
     }
 }
 
@@ -400,10 +497,18 @@ impl Formatter {
         let reindented = self.reindent_php_block(code, pad);
         let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
         if lines.len() > 1 {
-            output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
-            for line in &lines[1..lines.len() - 1] {
-                output.push_str(line);
-                output.push('\n');
+            if lines[0].trim_start().starts_with("/**") {
+                output.push_str(&format!("{pad}<?php\n"));
+                for line in &lines[..lines.len() - 1] {
+                    output.push_str(line);
+                    output.push('\n');
+                }
+            } else {
+                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+                for line in &lines[1..lines.len() - 1] {
+                    output.push_str(line);
+                    output.push('\n');
+                }
             }
             output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
         } else if lines.len() == 1 {
@@ -488,7 +593,10 @@ impl Formatter {
             output.push_str(&format!(
                 "{pad}<?php {condition}\n{inner_pad}? {true_val}\n{inner_pad}: {false_val} ?>\n"
             ));
-        } else if let Some(split) = self.try_split_long_line(&formatted, pad) {
+        } else if let Some(split) = self
+            .try_split_long_line(&formatted, pad)
+            .or_else(|| self.expand_braced_value(&formatted, pad))
+        {
             let lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
             if lines.len() > 1 {
                 output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
