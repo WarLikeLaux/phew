@@ -14,6 +14,7 @@ pub mod yii;
 use crate::config::Config;
 use crate::parser::{ast, lexer};
 
+#[derive(Debug)]
 pub struct Formatter {
     indent: String,
     max_line_length: usize,

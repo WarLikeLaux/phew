@@ -106,7 +106,7 @@ impl Formatter {
         }
 
         if item.starts_with('[') && item.ends_with(']') {
-            if let Some(expanded) = self.expand_assignment_array_literal(item, pad, true) {
+            if let Some(expanded) = self.expand_assignment_array_literal(item, pad) {
                 return expanded;
             }
             return format!("{pad}{item},\n");
@@ -144,7 +144,7 @@ impl Formatter {
         format!("{pad}{item},\n")
     }
 
-    fn expand_assignment_array_literal(&self, array: &str, pad: &str, trailing_comma: bool) -> Option<String> {
+    fn expand_assignment_array_literal(&self, array: &str, pad: &str) -> Option<String> {
         let trimmed = array.trim();
         if !trimmed.starts_with('[') || !trimmed.ends_with(']') {
             return None;
@@ -170,13 +170,7 @@ impl Formatter {
         for item in &items {
             result.push_str(&self.format_assignment_array_item(item, &nested_pad));
         }
-
-        if trailing_comma {
-            result.push_str(&format!("{pad}],\n"));
-        } else {
-            result.push_str(&format!("{pad}]\n"));
-        }
-
+        result.push_str(&format!("{pad}],\n"));
         Some(result)
     }
 
