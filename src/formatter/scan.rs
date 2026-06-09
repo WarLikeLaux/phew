@@ -2,31 +2,81 @@ fn byte_offset(chars: &[char], char_index: usize) -> usize {
     chars[..char_index].iter().map(|c| c.len_utf8()).sum()
 }
 
-pub fn find_matching_close(chars: &[char], open_pos: usize) -> Option<usize> {
-    let len = chars.len();
-    let mut depth = 0i32;
-    let mut i = open_pos;
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-        } else if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-            if depth == 0 {
-                return Some(i);
-            }
+pub(crate) struct Sig {
+    pub(crate) index: usize,
+    pub(crate) ch: char,
+    pub(crate) depth: i32,
+}
+
+pub(crate) struct PhpCursor<'a> {
+    chars: &'a [char],
+    pos: usize,
+    depth: i32,
+}
+
+impl<'a> PhpCursor<'a> {
+    pub(crate) fn new(chars: &'a [char]) -> Self {
+        Self {
+            chars,
+            pos: 0,
+            depth: 0,
         }
-        i += 1;
     }
-    None
+
+    pub(crate) fn from(chars: &'a [char], start: usize) -> Self {
+        Self {
+            chars,
+            pos: start,
+            depth: 0,
+        }
+    }
+
+    pub(crate) fn with_depth(chars: &'a [char], depth: i32) -> Self {
+        Self { chars, pos: 0, depth }
+    }
+}
+
+impl Iterator for PhpCursor<'_> {
+    type Item = Sig;
+
+    fn next(&mut self) -> Option<Sig> {
+        let len = self.chars.len();
+        while self.pos < len {
+            let ch = self.chars[self.pos];
+            if ch == '\'' || ch == '"' {
+                self.pos += 1;
+                while self.pos < len && self.chars[self.pos] != ch {
+                    if self.chars[self.pos] == '\\' {
+                        self.pos += 1;
+                    }
+                    self.pos += 1;
+                }
+                if self.pos < len {
+                    self.pos += 1;
+                }
+                continue;
+            }
+            let index = self.pos;
+            self.pos += 1;
+            if matches!(ch, '(' | '[' | '{') {
+                self.depth += 1;
+            } else if matches!(ch, ')' | ']' | '}') {
+                self.depth -= 1;
+            }
+            return Some(Sig {
+                index,
+                ch,
+                depth: self.depth,
+            });
+        }
+        None
+    }
+}
+
+pub fn find_matching_close(chars: &[char], open_pos: usize) -> Option<usize> {
+    PhpCursor::from(chars, open_pos)
+        .find(|s| s.depth == 0 && matches!(s.ch, ')' | ']' | '}'))
+        .map(|s| s.index)
 }
 
 pub fn find_ternary_positions(code: &str) -> Option<(usize, usize)> {
@@ -90,36 +140,9 @@ pub(crate) fn array_is_list(inner: &str) -> bool {
 
 pub(crate) fn find_top_level_fat_arrow(code: &str) -> Option<usize> {
     let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-    let mut depth = 0i32;
-
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-            i += 1;
-            continue;
-        }
-
-        if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-        } else if ch == '=' && i + 1 < len && chars[i + 1] == '>' && depth == 0 {
-            return Some(byte_offset(&chars, i));
-        }
-
-        i += 1;
-    }
-
-    None
+    PhpCursor::new(&chars)
+        .find(|s| s.ch == '=' && s.depth == 0 && chars.get(s.index + 1) == Some(&'>'))
+        .map(|s| byte_offset(&chars, s.index))
 }
 
 fn prev_non_ws(chars: &[char], pos: usize) -> Option<char> {
@@ -200,135 +223,33 @@ pub(crate) fn find_top_level_assignment_equal(code: &str) -> Option<usize> {
 }
 
 pub fn split_by_commas(code: &str) -> Vec<String> {
-    let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
-    let mut items = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0i32;
-    let mut i = 0;
-
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            current.push(ch);
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    current.push(chars[i]);
-                    i += 1;
-                }
-                if i < len {
-                    current.push(chars[i]);
-                    i += 1;
-                }
-            }
-            if i < len {
-                current.push(chars[i]);
-                i += 1;
-            }
-            continue;
-        }
-        if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-        } else if ch == ',' && depth == 0 {
-            items.push(current.trim().to_string());
-            current = String::new();
-            i += 1;
-            continue;
-        }
-        current.push(ch);
-        i += 1;
-    }
-
-    if !current.trim().is_empty() {
-        items.push(current.trim().to_string());
-    }
-
-    items
+    split_segments(code, 0, 0)
 }
 
-pub(crate) fn split_by_commas_with_depth(code: &str, mut depth: i32, split_depth: i32) -> Vec<String> {
+pub(crate) fn split_by_commas_with_depth(code: &str, start_depth: i32, split_depth: i32) -> Vec<String> {
+    split_segments(code, start_depth, split_depth)
+}
+
+fn split_segments(code: &str, start_depth: i32, split_depth: i32) -> Vec<String> {
     let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
     let mut items = Vec::new();
-    let mut current = String::new();
-    let mut i = 0;
-
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            current.push(ch);
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    current.push(chars[i]);
-                    i += 1;
-                }
-                if i < len {
-                    current.push(chars[i]);
-                    i += 1;
-                }
-            }
-            if i < len {
-                current.push(chars[i]);
-                i += 1;
-            }
-            continue;
+    let mut start = 0;
+    for sig in PhpCursor::with_depth(&chars, start_depth) {
+        if sig.ch == ',' && sig.depth == split_depth {
+            items.push(chars[start..sig.index].iter().collect::<String>().trim().to_string());
+            start = sig.index + 1;
         }
-
-        if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-        } else if ch == ',' && depth == split_depth {
-            items.push(current.trim().to_string());
-            current = String::new();
-            i += 1;
-            continue;
-        }
-
-        current.push(ch);
-        i += 1;
     }
-
-    if !current.trim().is_empty() {
-        items.push(current.trim().to_string());
+    let last = chars[start..].iter().collect::<String>().trim().to_string();
+    if !last.is_empty() {
+        items.push(last);
     }
-
     items
 }
 
 pub(crate) fn bracket_balance(code: &str) -> i32 {
     let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
-    let mut depth = 0i32;
-    let mut i = 0;
-
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-            i += 1;
-            continue;
-        }
-
-        if matches!(ch, '(' | '[' | '{') {
-            depth += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
-            depth -= 1;
-        }
-        i += 1;
-    }
-
-    depth
+    PhpCursor::new(&chars).last().map_or(0, |s| s.depth)
 }
 
 pub fn has_expandable_closure(code: &str) -> bool {
@@ -459,31 +380,9 @@ pub fn normalize_closure_body(body: &str) -> Vec<String> {
 
 pub fn find_brace_block(code: &str) -> Option<(usize, usize)> {
     let chars: Vec<char> = code.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-    while i < len {
-        if chars[i] == '\'' || chars[i] == '"' {
-            let q = chars[i];
-            i += 1;
-            while i < len && chars[i] != q {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-            if i < len {
-                i += 1;
-            }
-            continue;
-        }
-        if chars[i] == '{' {
-            if let Some(close) = find_matching_close(&chars, i) {
-                return Some((i, close));
-            }
-        }
-        i += 1;
-    }
-    None
+    let open = PhpCursor::new(&chars).find(|s| s.ch == '{').map(|s| s.index)?;
+    let close = find_matching_close(&chars, open)?;
+    Some((open, close))
 }
 
 pub fn find_array_arrow(arg: &str) -> Option<(usize, usize)> {
@@ -537,30 +436,16 @@ pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
 }
 
 pub(crate) fn count_brackets(s: &str) -> (usize, usize) {
+    let chars: Vec<char> = s.chars().collect();
     let mut openers = 0usize;
     let mut closers = 0usize;
-    let chars: Vec<char> = s.chars().collect();
-    let len = chars.len();
-    let mut i = 0;
-
-    while i < len {
-        let ch = chars[i];
-        if ch == '\'' || ch == '"' {
-            i += 1;
-            while i < len && chars[i] != ch {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-        } else if matches!(ch, '(' | '[' | '{') {
+    for sig in PhpCursor::new(&chars) {
+        if matches!(sig.ch, '(' | '[' | '{') {
             openers += 1;
-        } else if matches!(ch, ')' | ']' | '}') {
+        } else if matches!(sig.ch, ')' | ']' | '}') {
             closers += 1;
         }
-        i += 1;
     }
-
     (openers, closers)
 }
 
