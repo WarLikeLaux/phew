@@ -4,6 +4,7 @@ pub mod engine;
 pub mod html;
 pub mod indent;
 pub mod php;
+pub mod scan;
 pub mod split;
 pub mod yii;
 
