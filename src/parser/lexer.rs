@@ -55,15 +55,7 @@ fn consume_attr_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> S
                 if look.peek() == Some(&'?') {
                     value.push(c);
                     chars.next();
-                    while let Some(&pc) = chars.peek() {
-                        value.push(pc);
-                        chars.next();
-                        if pc == '?' && chars.peek() == Some(&'>') {
-                            value.push('>');
-                            chars.next();
-                            break;
-                        }
-                    }
+                    consume_php_segment(chars, &mut value);
                     continue;
                 }
             }
@@ -97,18 +89,9 @@ fn try_consume_php_attr(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Att
     if lookahead.peek() != Some(&'?') {
         return None;
     }
-    let mut php_buf = String::from("<?");
+    let mut php_buf = String::from("<");
     chars.next();
-    chars.next();
-    while let Some(&c) = chars.peek() {
-        php_buf.push(c);
-        chars.next();
-        if c == '?' && chars.peek() == Some(&'>') {
-            php_buf.push('>');
-            chars.next();
-            break;
-        }
-    }
+    consume_php_segment(chars, &mut php_buf);
     Some(Attribute {
         name: php_buf,
         value: None,
@@ -184,41 +167,81 @@ fn parse_tag(tag_content: &str) -> Token {
     }
 }
 
+enum PhpScan {
+    Code,
+    Str(char),
+    LineComment,
+    BlockComment,
+}
+
+fn consume_php_code(chars: &mut std::iter::Peekable<std::str::Chars<'_>>, buf: &mut String) -> bool {
+    let mut state = PhpScan::Code;
+    while let Some(c) = chars.next() {
+        match state {
+            PhpScan::Code => {
+                if c == '?' && chars.peek() == Some(&'>') {
+                    chars.next();
+                    return true;
+                }
+                buf.push(c);
+                state = scan_code_transition(c, chars, buf);
+            }
+            PhpScan::Str(q) => {
+                buf.push(c);
+                if c == '\\' {
+                    if let Some(esc) = chars.next() {
+                        buf.push(esc);
+                    }
+                } else if c == q {
+                    state = PhpScan::Code;
+                }
+            }
+            PhpScan::LineComment => {
+                if c == '?' && chars.peek() == Some(&'>') {
+                    chars.next();
+                    return true;
+                }
+                buf.push(c);
+                if c == '\n' {
+                    state = PhpScan::Code;
+                }
+            }
+            PhpScan::BlockComment => {
+                buf.push(c);
+                if c == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    buf.push('/');
+                    state = PhpScan::Code;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn scan_code_transition(c: char, chars: &mut std::iter::Peekable<std::str::Chars<'_>>, buf: &mut String) -> PhpScan {
+    if c == '\'' || c == '"' {
+        return PhpScan::Str(c);
+    }
+    if c == '#' && chars.peek() != Some(&'[') {
+        return PhpScan::LineComment;
+    }
+    if c == '/' && chars.peek() == Some(&'/') {
+        chars.next();
+        buf.push('/');
+        return PhpScan::LineComment;
+    }
+    if c == '/' && chars.peek() == Some(&'*') {
+        chars.next();
+        buf.push('*');
+        return PhpScan::BlockComment;
+    }
+    PhpScan::Code
+}
+
 fn consume_php_block(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) -> String {
     let mut content = String::new();
-    let mut in_string: Option<char> = None;
-    while let Some(&c) = chars.peek() {
-        if let Some(q) = in_string {
-            content.push(c);
-            chars.next();
-            if c == '\\' {
-                if let Some(&esc) = chars.peek() {
-                    content.push(esc);
-                    chars.next();
-                }
-            } else if c == q {
-                in_string = None;
-            }
-            continue;
-        }
-        if c == '\'' || c == '"' {
-            in_string = Some(c);
-            content.push(c);
-            chars.next();
-            continue;
-        }
-        if c == '?' {
-            chars.next();
-            if chars.peek() == Some(&'>') {
-                chars.next();
-                break;
-            }
-            content.push('?');
-            continue;
-        }
-        content.push(c);
-        chars.next();
-    }
+    consume_php_code(chars, &mut content);
     let trimmed = content.trim_end().to_string();
     if trimmed.contains('\n') {
         trimmed.strip_prefix('\n').unwrap_or(&trimmed).to_string()
@@ -362,19 +385,17 @@ fn try_consume_doctype(chars: &mut Peekable<std::str::Chars<'_>>) -> Option<Toke
     Some(Token::Doctype(buf.trim().to_string()))
 }
 
-fn consume_php_in_tag(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
-    buf.push('<');
+fn consume_php_segment(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
     buf.push('?');
     chars.next();
-    while let Some(&pc) = chars.peek() {
-        buf.push(pc);
-        chars.next();
-        if pc == '?' && chars.peek() == Some(&'>') {
-            buf.push('>');
-            chars.next();
-            break;
-        }
+    if consume_php_code(chars, buf) {
+        buf.push_str("?>");
     }
+}
+
+fn consume_php_in_tag(chars: &mut Peekable<std::str::Chars<'_>>, buf: &mut String) {
+    buf.push('<');
+    consume_php_segment(chars, buf);
 }
 
 fn consume_tag_body(chars: &mut Peekable<std::str::Chars<'_>>) -> String {

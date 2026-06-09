@@ -1,5 +1,5 @@
 <a
-    href="<?= "/admin/instruction/update?id={$model->id}" ?>"
+    href='<?= "/admin/instruction/update?id={$model->id}" ?>'
     target="_blank"
     class="tag-list__item m-0 ml-px-12 text-muted"
 >

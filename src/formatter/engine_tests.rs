@@ -177,9 +177,9 @@ fn attr_literal_double_quotes_use_single_delimiter() {
 }
 
 #[test]
-fn attr_php_double_quotes_keep_double_delimiter() {
+fn attr_php_double_quotes_use_single_delimiter() {
     let input = "<a href=\"<?= \"/u\" ?>\">x</a>";
-    assert_eq!(format_str(input), "<a href=\"<?= \"/u\" ?>\">x</a>\n");
+    assert_eq!(format_str(input), "<a href='<?= \"/u\" ?>'>x</a>\n");
 }
 
 #[test]

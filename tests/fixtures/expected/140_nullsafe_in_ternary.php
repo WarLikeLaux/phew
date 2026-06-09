@@ -1,0 +1,3 @@
+<?= $object?->property
+    ? $primaryLongDisplayValueForTestingPurposes
+    : $secondaryFallbackDisplayValueForTestingPurposesToo ?>

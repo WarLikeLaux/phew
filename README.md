@@ -5,13 +5,13 @@
 
 **⚡ Быстрый форматтер HTML + PHP для view-файлов Yii 2 • Rust 2024 edition**
 
-[![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![CI](https://img.shields.io/badge/CI-passing-brightgreen?style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=for-the-badge&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-84_passed-success?style=for-the-badge&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-126_pairs-success?style=for-the-badge&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.8.0-orange?style=for-the-badge&logo=semver&logoColor=white)](Cargo.toml)
+[![Rust](https://img.shields.io/badge/Rust-2024_Edition-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
+[![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
+[![Tests](https://img.shields.io/badge/Tests-94_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-140_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-0.9.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -49,8 +49,8 @@ phew -w views/site/index.php
 # Файлы из .gitignore и .phewignore пропускаются
 phew -w views/
 
-# Прочитать буфер из stdin и вывести отформатированный в stdout (для редактора по пайпу)
-cat views/site/index.php | phew -
+# Прочитать из stdin, отформатированный вывести в stdout (для интеграции с редактором)
+phew - < views/site/index.php
 ```
 
 ### CI и предпросмотр
@@ -76,6 +76,12 @@ phew -w views/ widgets/ && git add -u
 ```sh
 #!/bin/sh
 phew --check views/ || { echo "Запусти: phew -w views/"; exit 1; }
+```
+
+На больших проектах проверяйте только staged-файлы, чтобы не блокировать коммит из-за чужого кода в соседних файлах:
+
+```sh
+git diff --cached --name-only -z --diff-filter=d | grep -zE '\.php$' | xargs -0 -r phew --check
 ```
 
 Отладочные режимы:
@@ -118,31 +124,38 @@ phew --indent-size 2 views/
 
 ## Пример
 
-**До:**
+**До:** (всё в одну строку, без пробелов, смешанные кавычки)
 ```php
-<div class="site-index">
-<?php if($model->isActive):?>
-<h1><?= Html::encode( $model->title ) ?></h1>
-    <?php foreach($model->items as $item):?>
-  <div class="item">
-        <?= Html::a($item->name,['item/view','id'=>$item->id],['class'=>'btn btn-primary']) ?>
-      </div>
-<?php endforeach;?>
-    <?php endif;?>
+<div class="catalog">
+<?php $form=ActiveForm::begin(['options'=>['data-config'=>'{"ajax":true,"perPage":20}']]);?>
+<?=$form->field($model,'category')->dropDownList($categories,['prompt'=>Yii::t('app','Выберите категорию товара')])?>
+<?=GridView::widget(['dataProvider'=>$dataProvider,'columns'=>['id',['attribute'=>'type','value'=>fn($m)=>match($m->type){'book'=>Yii::t('app','Книга'),'article'=>Yii::t('app','Статья'),default=>Yii::t('app','Неизвестно')}],['class'=>ActionColumn::class]]])?>
+<?php ActiveForm::end();?>
 </div>
 ```
 
 **После:**
 ```php
-<div class="site-index">
-    <?php if ($model->isActive): ?>
-        <h1><?= Html::encode($model->title) ?></h1>
-        <?php foreach ($model->items as $item): ?>
-            <div class="item">
-                <?= Html::a($item->name, ['item/view', 'id' => $item->id], ['class' => 'btn btn-primary']) ?>
-            </div>
-        <?php endforeach; ?>
-    <?php endif; ?>
+<div class="catalog">
+    <?php $form = ActiveForm::begin(['options' => ['data-config' => '{"ajax":true,"perPage":20}']]); ?>
+        <?= $form->field($model, 'category')
+            ->dropDownList($categories, ['prompt' => Yii::t('app', 'Выберите категорию товара')]) ?>
+        <?= GridView::widget([
+            'dataProvider' => $dataProvider,
+            'columns' => [
+                'id',
+                [
+                    'attribute' => 'type',
+                    'value' => fn ($m) => match ($m->type) {
+                        'book' => Yii::t('app', 'Книга'),
+                        'article' => Yii::t('app', 'Статья'),
+                        default => Yii::t('app', 'Неизвестно'),
+                    },
+                ],
+                ['class' => ActionColumn::class],
+            ],
+        ]) ?>
+    <?php ActiveForm::end(); ?>
 </div>
 ```
 
@@ -170,7 +183,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**84 unit-теста**, **126 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
+**94 unit-теста**, **140 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures
