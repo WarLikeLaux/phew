@@ -113,6 +113,12 @@ impl Formatter {
             return Some(expanded);
         }
 
+        if formatted.trim_end().ends_with(';')
+            && let Some(expanded) = self.expand_inline_closure(formatted, base_pad)
+        {
+            return Some(expanded);
+        }
+
         None
     }
 

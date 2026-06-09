@@ -162,3 +162,13 @@ fn trait_use_list_stays_on_one_line() {
     let out = Formatter::default().format_source(src);
     assert!(out.contains("    use Hello, World {\n"), "got: {out}");
 }
+
+#[test]
+fn closure_in_multi_statement_block_always_wraps() {
+    let src = "<?php\n$total = 0;\n$add = function ($x) use (&$total) { $total += $x; return $total; };\n$add(5);\n";
+    let out = Formatter::default().format_source(src);
+    assert_eq!(
+        out,
+        "<?php $total = 0;\n$add = function ($x) use (&$total) {\n    $total += $x;\n    return $total;\n};\n$add(5); ?>\n"
+    );
+}
