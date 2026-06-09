@@ -97,8 +97,7 @@ impl Formatter {
     pub fn format_echo(&self, code: &str, pad: &str) -> String {
         let joined = join_php_lines(code);
         let formatted = format_php_code(&joined);
-        let combined = format!("{formatted} ?>");
-        let single = format!("{pad}<?= {combined}");
+        let single = format!("{pad}<?= {formatted} ?>");
 
         let fits = visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted);
         if fits && !is_structural_widget(&formatted) {
@@ -120,38 +119,7 @@ impl Formatter {
         }
 
         if let Some((prefix, args, suffix)) = split_by_args(&formatted) {
-            let mut result = format!("{pad}<?= {prefix}\n");
-            let inner_pad = format!("{pad}{}", self.indent);
-            for arg in &args {
-                let line_len = inner_pad.len() + arg.len() + 1;
-                if line_len > self.max_line_length {
-                    if let Some(expanded) = self.expand_nested_array(arg, &inner_pad) {
-                        result.push_str(&expanded);
-                        continue;
-                    }
-                    if let Some(expanded) = self.expand_bare_array(arg, &inner_pad) {
-                        result.push_str(&expanded);
-                        continue;
-                    }
-                    if let Some(split) = self.try_split_long_line(arg, &inner_pad) {
-                        let trimmed = split.trim_end_matches('\n');
-                        result.push_str(trimmed);
-                        result.push_str(",\n");
-                        continue;
-                    }
-                }
-                if let Some(expanded) = self.expand_bare_array(arg, &inner_pad) {
-                    result.push_str(&expanded);
-                    continue;
-                }
-                if let Some(expanded) = self.expand_closure_element(arg, &inner_pad) {
-                    result.push_str(&expanded);
-                    continue;
-                }
-                result.push_str(&format!("{inner_pad}{arg},\n"));
-            }
-            result.push_str(&format!("{pad}{suffix} ?>\n"));
-            return result;
+            return self.format_echo_call(&prefix, &args, &suffix, pad);
         }
 
         if let Some(split) = self.split_long_line(&formatted, pad) {
@@ -160,6 +128,38 @@ impl Formatter {
         }
 
         format!("{single}\n")
+    }
+
+    fn format_echo_call(&self, prefix: &str, args: &[String], suffix: &str, pad: &str) -> String {
+        let inner_pad = format!("{pad}{}", self.indent);
+        let mut result = format!("{pad}<?= {prefix}\n");
+        for arg in args {
+            result.push_str(&self.format_echo_arg(arg, &inner_pad));
+        }
+        result.push_str(&format!("{pad}{suffix} ?>\n"));
+        result
+    }
+
+    fn format_echo_arg(&self, arg: &str, inner_pad: &str) -> String {
+        let line_len = inner_pad.len() + arg.len() + 1;
+        if line_len > self.max_line_length {
+            if let Some(expanded) = self.expand_nested_array(arg, inner_pad) {
+                return expanded;
+            }
+            if let Some(expanded) = self.expand_bare_array(arg, inner_pad) {
+                return expanded;
+            }
+            if let Some(split) = self.try_split_long_line(arg, inner_pad) {
+                return format!("{},\n", split.trim_end_matches('\n'));
+            }
+        }
+        if let Some(expanded) = self.expand_bare_array(arg, inner_pad) {
+            return expanded;
+        }
+        if let Some(expanded) = self.expand_closure_element(arg, inner_pad) {
+            return expanded;
+        }
+        format!("{inner_pad}{arg},\n")
     }
 }
 
