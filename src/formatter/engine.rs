@@ -224,7 +224,16 @@ impl Formatter {
         output.push_str(&format!("{pad}</{name}>\n"));
     }
 
-    fn emit_element(&self, name: &str, attributes: &[Attribute], children: &[Node], ctx: (usize, &mut String)) {
+    fn emit_element(&self, el: &Node, ctx: (usize, &mut String)) {
+        let Node::Element {
+            name,
+            attributes,
+            children,
+            foreign,
+        } = el
+        else {
+            return;
+        };
         let (depth, output) = ctx;
         if is_verbatim_element(name) {
             self.emit_verbatim_element(name, attributes, children, (depth, output));
@@ -241,6 +250,8 @@ impl Formatter {
                 .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()));
         if children.is_empty() && is_void_element(name) {
             self.emit_open_tag(name, attributes, &pad, output);
+        } else if is_empty && *foreign && is_svg_void_element(name) {
+            self.emit_self_closing_tag(name, attributes, &pad, output);
         } else if is_empty {
             self.emit_empty_element(name, attributes, &pad, output);
         } else if is_inline_content(children) && fits_inline_element(name, children) {
@@ -272,10 +283,6 @@ impl Formatter {
     }
 
     fn emit_empty_element(&self, name: &str, attributes: &[Attribute], pad: &str, output: &mut String) {
-        if is_svg_void_element(name) {
-            self.emit_self_closing_tag(name, attributes, pad, output);
-            return;
-        }
         let attrs = format_attributes(attributes);
         let inline_tag = format!("{pad}<{name}{attrs}></{name}>");
         if visual_len(&inline_tag) <= self.max_line_length {
@@ -361,6 +368,7 @@ fn render_node_inline(node: &Node) -> String {
             name,
             attributes,
             children,
+            ..
         } => {
             if is_void_element(name) {
                 let attrs = format_attributes(attributes);
@@ -570,12 +578,8 @@ impl Formatter {
         }
 
         match &nodes[i] {
-            Node::Element {
-                name,
-                attributes,
-                children,
-            } => {
-                self.emit_element(name, attributes, children, (state.depth, output));
+            el @ Node::Element { .. } => {
+                self.emit_element(el, (state.depth, output));
             }
             Node::Text(s) => {
                 let trimmed = s.trim();
@@ -619,6 +623,7 @@ impl Formatter {
                 name,
                 attributes,
                 children,
+                ..
             } => {
                 let attrs = format_attributes(attributes);
                 output.push_str(&format!("{pad}<{name}{attrs}>\n"));

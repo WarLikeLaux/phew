@@ -30,6 +30,7 @@ fn simple_div_with_text() {
             name: "div".into(),
             attributes: vec![],
             children: vec![Node::Text("hello".into())],
+            foreign: false,
         }]
     );
 }
@@ -59,7 +60,9 @@ fn nested_elements() {
                 name: "span".into(),
                 attributes: vec![],
                 children: vec![Node::Text("x".into())],
+                foreign: false,
             }],
+            foreign: false,
         }]
     );
 }
@@ -81,6 +84,7 @@ fn mixed_html_php() {
             name: "div".into(),
             attributes: vec![attr("class", Some("item"))],
             children: vec![Node::PhpEcho("$name".into())],
+            foreign: false,
         }]
     );
 }
@@ -106,6 +110,7 @@ fn php_blocks_at_top_level() {
                 name: "p".into(),
                 attributes: vec![],
                 children: vec![Node::Text("hi".into())],
+                foreign: false,
             },
             Node::PhpBlock("endif;".into()),
         ]
@@ -135,7 +140,9 @@ fn self_closing_in_tree() {
                 name: "br".into(),
                 attributes: vec![],
                 children: vec![],
+                foreign: false,
             }],
+            foreign: false,
         }]
     );
 }

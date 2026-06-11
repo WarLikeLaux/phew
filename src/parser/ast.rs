@@ -8,12 +8,21 @@ fn is_void_element(name: &str) -> bool {
     VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
 }
 
+const FOREIGN_ROOTS: &[&str] = &["svg", "math"];
+
+fn in_foreign_content(stack: &[(String, Vec<Attribute>, Vec<Node>)]) -> bool {
+    stack
+        .iter()
+        .any(|(n, _, _)| FOREIGN_ROOTS.contains(&n.to_lowercase().as_str()))
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Node {
     Element {
         name: String,
         attributes: Vec<Attribute>,
         children: Vec<Node>,
+        foreign: bool,
     },
     Text(String),
     PhpBlock(String),
@@ -31,6 +40,7 @@ fn close_tag_unwind(close_name: &str, stack: &mut Vec<(String, Vec<Attribute>, V
                     name,
                     attributes,
                     children: std::mem::take(current),
+                    foreign: in_foreign_content(stack),
                 });
                 *current = parent;
             }
@@ -40,6 +50,7 @@ fn close_tag_unwind(close_name: &str, stack: &mut Vec<(String, Vec<Attribute>, V
                 name,
                 attributes,
                 children: std::mem::take(current),
+                foreign: in_foreign_content(stack),
             });
             *current = parent;
         }
@@ -58,6 +69,7 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
                         name,
                         attributes,
                         children: Vec::new(),
+                        foreign: in_foreign_content(&stack),
                     });
                 } else {
                     stack.push((name, attributes, std::mem::take(&mut current)));
@@ -69,6 +81,7 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
                     name,
                     attributes,
                     children: Vec::new(),
+                    foreign: in_foreign_content(&stack),
                 });
             }
             Token::Text(s) => current.push(Node::Text(s)),
@@ -83,6 +96,7 @@ pub fn parse(tokens: Vec<Token>) -> Vec<Node> {
             name,
             attributes,
             children: std::mem::take(&mut current),
+            foreign: in_foreign_content(&stack),
         });
         current = parent;
     }

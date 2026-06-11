@@ -128,6 +128,7 @@ fn render_node_raw_preserves_element_subtree() {
             value: Some("каталог".into()),
         }],
         children: vec![Node::PhpEcho("$товар".into())],
+        foreign: false,
     };
     let mut out = String::new();
     Formatter::default().render_node_raw(&node, "", &mut out);
