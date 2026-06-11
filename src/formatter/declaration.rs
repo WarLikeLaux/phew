@@ -1,3 +1,5 @@
+use super::scan::PhpCursor;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DeclKind {
     ClassLike,
@@ -220,30 +222,16 @@ fn account_member(frames: &mut [Frame], out: &mut Vec<String>, is_decl: bool) {
 
 fn adjust_frames(line: &str, frames: &mut Vec<Frame>) {
     let chars: Vec<char> = line.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c == '\'' || c == '"' {
-            i += 1;
-            while i < chars.len() && chars[i] != c {
-                if chars[i] == '\\' {
-                    i += 1;
-                }
-                i += 1;
-            }
-            i += 1;
-            continue;
-        }
-        if c == '{' {
+    for sig in PhpCursor::new(&chars) {
+        if sig.ch == '{' {
             frames.push(Frame {
                 class_like: false,
                 count: 0,
                 doc_pending: false,
             });
-        } else if c == '}' {
+        } else if sig.ch == '}' {
             frames.pop();
         }
-        i += 1;
     }
 }
 

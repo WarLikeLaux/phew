@@ -56,6 +56,14 @@ impl Iterator for PhpCursor<'_> {
                 }
                 continue;
             }
+            if ch == '/' && self.pos + 1 < len && self.chars[self.pos + 1] == '*' {
+                self.pos += 2;
+                while self.pos + 1 < len && !(self.chars[self.pos] == '*' && self.chars[self.pos + 1] == '/') {
+                    self.pos += 1;
+                }
+                self.pos = (self.pos + 2).min(len);
+                continue;
+            }
             let index = self.pos;
             self.pos += 1;
             if matches!(ch, '(' | '[' | '{') {

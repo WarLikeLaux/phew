@@ -65,3 +65,11 @@ fn concat_ignores_decimal_and_spread() {
     let real = find_top_level_binary_op("$x = $a . $b", BinaryOp::Concat);
     assert_eq!(real.len(), 1, "real concat must count: {real:?}");
 }
+
+#[test]
+fn count_brackets_ignores_block_comments() {
+    assert_eq!(count_brackets("/* open { brace */"), (0, 0));
+    assert_eq!(count_brackets("$x = 1; /* } stray */"), (0, 0));
+    assert_eq!(count_brackets("if ($x) { /* { */"), (2, 1));
+    assert_eq!(count_brackets("'/* not a comment */ {'"), (0, 0));
+}

@@ -172,3 +172,13 @@ fn closure_in_multi_statement_block_always_wraps() {
         "<?php $total = 0;\n$add = function ($x) use (&$total) {\n    $total += $x;\n    return $total;\n};\n$add(5); ?>\n"
     );
 }
+
+#[test]
+fn braces_in_comments_do_not_shift_indentation() {
+    let src = "<?php\nclass C {\npublic function a() {\n/* open { brace */\nreturn 1;\n}\npublic function b() { return 2; }\n}\n";
+    let out = Formatter::default().format_source(src);
+    assert_eq!(
+        out,
+        "<?php\n\nclass C\n{\n    public function a()\n    {\n        /* open { brace */\n        return 1;\n    }\n\n    public function b()\n    {\n        return 2;\n    }\n}\n?>\n"
+    );
+}
