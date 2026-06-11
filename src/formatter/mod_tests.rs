@@ -182,3 +182,32 @@ fn braces_in_comments_do_not_shift_indentation() {
         "<?php\n\nclass C\n{\n    public function a()\n    {\n        /* open { brace */\n        return 1;\n    }\n\n    public function b()\n    {\n        return 2;\n    }\n}\n?>\n"
     );
 }
+
+#[test]
+fn declare_with_space_before_paren_is_normalized() {
+    let src = "<?php\ndeclare (strict_types=1);\nclass C {\npublic function a() { return 1; }\n}\n";
+    let out = Formatter::default().format_source(src);
+    assert!(out.contains("declare(strict_types=1);"), "got: {out}");
+    assert!(
+        out.contains("class C\n{"),
+        "declaration after spaced declare must get Allman brace: {out}"
+    );
+}
+
+#[test]
+fn use_import_with_tab_is_canonicalized() {
+    let src = "<?php\nuse\tapp\\models\\User;\nuse app\\models\\Post;\n$u = User::find();\n";
+    let out = Formatter::default().format_source(src);
+    assert!(
+        out.contains("use app\\models\\Post;\nuse app\\models\\User;"),
+        "tabbed import must be canonicalized and sorted: {out}"
+    );
+}
+
+#[test]
+fn svg_primitives_self_close_only_inside_svg() {
+    let outside = Formatter::default().format_source("<div><path d=\"M0 0\"></path></div>\n");
+    assert!(outside.contains("<path d=\"M0 0\"></path>"), "got: {outside}");
+    let inside = Formatter::default().format_source("<svg><circle cx=\"1\" cy=\"1\" r=\"1\"></circle></svg>\n");
+    assert!(inside.contains("<circle cx=\"1\" cy=\"1\" r=\"1\"/>"), "got: {inside}");
+}

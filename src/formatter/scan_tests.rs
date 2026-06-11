@@ -73,3 +73,17 @@ fn count_brackets_ignores_block_comments() {
     assert_eq!(count_brackets("if ($x) { /* { */"), (2, 1));
     assert_eq!(count_brackets("'/* not a comment */ {'"), (0, 0));
 }
+
+#[test]
+fn declare_and_use_detection_allow_whitespace_and_case() {
+    assert!(is_declare_stmt("declare(strict_types=1);"));
+    assert!(is_declare_stmt("declare (strict_types=1);"));
+    assert!(is_declare_stmt("DECLARE (ticks=1);"));
+    assert!(!is_declare_stmt("declared($x);"));
+    assert!(is_use_import_line("use Foo\\Bar;"));
+    assert!(is_use_import_line("use\tFoo;"));
+    assert!(is_use_import_line("USE Foo;"));
+    assert!(!is_use_import_line("use ($y)"));
+    assert!(!is_use_import_line("user $x"));
+    assert!(!is_use_import_line("used $x"));
+}

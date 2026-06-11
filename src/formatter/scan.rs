@@ -477,6 +477,24 @@ pub(crate) fn contains_heredoc(code: &str) -> bool {
     code.contains('\n') && contains_outside_strings(code, "<<<")
 }
 
+pub(crate) fn is_declare_stmt(s: &str) -> bool {
+    s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("declare")) && s[7..].trim_start().starts_with('(')
+}
+
+pub(crate) fn is_use_import_line(s: &str) -> bool {
+    if !s.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("use")) {
+        return false;
+    }
+    let after = &s[3..];
+    if !after.starts_with(|c: char| c.is_whitespace()) {
+        return false;
+    }
+    matches!(
+        after.trim_start().chars().next(),
+        Some(c) if c.is_alphabetic() || c == '\\' || c == '_'
+    )
+}
+
 pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
     let bytes = code.as_bytes();
     let needle_bytes = needle.as_bytes();

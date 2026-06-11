@@ -1,4 +1,4 @@
-use super::scan::PhpCursor;
+use super::scan::{PhpCursor, is_declare_stmt, is_use_import_line};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum DeclKind {
@@ -90,7 +90,7 @@ fn skip_leading_trivia(code: &str) -> &str {
             rest = rest[end..].trim_start();
             continue;
         }
-        if rest.starts_with("use ") || rest.starts_with("declare(") {
+        if is_use_import_line(rest) || is_declare_stmt(rest) {
             let Some(end) = rest.find(';') else {
                 return rest;
             };
