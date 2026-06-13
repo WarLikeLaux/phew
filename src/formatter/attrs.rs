@@ -126,10 +126,47 @@ fn format_attribute(attr: &Attribute) -> String {
     format!("{}={quote}{value}{quote}", attr.name)
 }
 
+struct TagSpec<'a> {
+    name: &'a str,
+    attributes: &'a [Attribute],
+    pad: &'a str,
+    closer: &'a str,
+}
+
 impl Formatter {
     pub(crate) fn emit_open_tag(&self, name: &str, attributes: &[Attribute], pad: &str, output: &mut String) {
+        self.emit_tag(
+            &TagSpec {
+                name,
+                attributes,
+                pad,
+                closer: ">",
+            },
+            output,
+        );
+    }
+
+    pub(crate) fn emit_self_closing_tag(&self, name: &str, attributes: &[Attribute], pad: &str, output: &mut String) {
+        self.emit_tag(
+            &TagSpec {
+                name,
+                attributes,
+                pad,
+                closer: "/>",
+            },
+            output,
+        );
+    }
+
+    fn emit_tag(&self, tag: &TagSpec<'_>, output: &mut String) {
+        let TagSpec {
+            name,
+            attributes,
+            pad,
+            closer,
+        } = tag;
         let attrs = format_attributes(attributes);
-        let single = format!("{pad}<{name}{attrs}>");
+        let single = format!("{pad}<{name}{attrs}{closer}");
 
         if attributes.is_empty() || visual_len(&single) <= self.max_line_length {
             output.push_str(&single);
@@ -140,14 +177,14 @@ impl Formatter {
         let indent = &self.indent;
         output.push_str(&format!("{pad}<{name}\n"));
         let attr_pad = format!("{pad}{indent}");
-        for attr in attributes {
+        for attr in attributes.iter() {
             let line = format!("{attr_pad}{}", format_attribute(attr));
             if visual_len(&line) <= self.max_line_length || !self.emit_attribute_split(attr, &attr_pad, output) {
                 output.push_str(&line);
                 output.push('\n');
             }
         }
-        output.push_str(&format!("{pad}>\n"));
+        output.push_str(&format!("{pad}{closer}\n"));
     }
 
     fn emit_attribute_split(&self, attr: &Attribute, attr_pad: &str, output: &mut String) -> bool {

@@ -1,0 +1,20 @@
+<?= Nav::widget([
+    'items' => [
+        [
+            'label' => 'Home',
+            'url' => ['/'],
+        ],
+        [
+            'label' => 'About',
+            'url' => ['/site/about'],
+        ],
+        [
+            'label' => 'Contact',
+            'url' => ['/site/contact'],
+        ],
+        [
+            'label' => 'Login',
+            'url' => ['/site/login'],
+        ],
+    ],
+]) ?>

@@ -126,6 +126,7 @@ fn render_tree(nodes: &[ast::Node], indent: usize, out: &mut String) {
                 name,
                 attributes,
                 children,
+                ..
             } => {
                 if attributes.is_empty() {
                     out.push_str(&format!("{pad}<{name}>\n"));

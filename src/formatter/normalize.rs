@@ -1,4 +1,4 @@
-use super::scan::count_brackets;
+use super::scan::{count_brackets, is_use_import_line};
 
 fn skip_string_literal(chars: &[char], start: usize, result: &mut String) -> usize {
     let quote = chars[start];
@@ -163,13 +163,19 @@ pub(crate) fn normalize_statements(code: &str) -> String {
             i += 1;
             continue;
         }
+        if ch == ';' {
+            in_case_label = false;
+        }
         result.push(ch);
         let next_is_nl = next.is_some_and(|c| c == '\n');
         if ch == ';' && paren_depth <= 0 && !next_is_nl {
             result.push('\n');
         }
         if ch == ',' && brace_depth > 0 && paren_depth <= 0 && bracket_depth <= 0 && !next_is_nl {
-            result.push('\n');
+            let line_start = result.rfind('\n').map_or(0, |p| p + 1);
+            if !is_use_import_line(result[line_start..].trim_start()) {
+                result.push('\n');
+            }
         }
         i += 1;
     }

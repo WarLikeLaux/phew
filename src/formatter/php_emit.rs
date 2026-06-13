@@ -1,4 +1,5 @@
 use super::Formatter;
+use super::declaration::is_declaration_block;
 use super::docblock::{emit_docblock_php, expand_single_line_docblock, is_docblock_only};
 use super::echo::{contains_break, is_echo_block_closer, is_echo_block_opener};
 use super::indent::{
@@ -269,6 +270,10 @@ impl Formatter {
 
     pub(crate) fn emit_php_block(&self, code: &str, pad: &str, state: &mut PhpDepthState, output: &mut String) {
         let trimmed = code.trim();
+        if is_declaration_block(trimmed) {
+            self.emit_declaration_block(code, pad, output);
+            return;
+        }
         if let Some(expr) = trimmed.strip_prefix("echo ") {
             let expr = expr.strip_suffix(';').unwrap_or(expr).trim();
             let semicolons = count_semicolons_outside_parens(code);
@@ -290,6 +295,13 @@ impl Formatter {
         } else {
             self.emit_single_php(code, pad, state, output);
         }
+    }
+
+    fn emit_declaration_block(&self, code: &str, pad: &str, output: &mut String) {
+        output.push_str(&format!("{pad}<?php\n"));
+        output.push('\n');
+        output.push_str(&self.reindent_declaration_block(code, pad));
+        output.push_str(&format!("{pad}?>\n"));
     }
 
     fn emit_php_switch_block(&self, code: &str, state: &mut PhpDepthState, output: &mut String) {

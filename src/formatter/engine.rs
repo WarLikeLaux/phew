@@ -5,11 +5,16 @@ use super::echo::{is_echo_block_closer, is_echo_block_opener, is_single_echo_blo
 use super::indent::{is_header_php_block, visual_len};
 use super::php::{format_php_code, join_php_lines};
 use super::php_emit::PhpDepthState;
+use super::scan::contains_heredoc;
 use crate::parser::ast::Node;
 use crate::parser::lexer::Attribute;
 
 const VOID_ELEMENTS: &[&str] = &[
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
+];
+
+const SVG_VOID_ELEMENTS: &[&str] = &[
+    "circle", "ellipse", "line", "path", "polygon", "polyline", "rect", "stop", "use",
 ];
 
 const RAW_TEXT_ELEMENTS: &[&str] = &["script", "style"];
@@ -20,8 +25,20 @@ fn is_void_element(name: &str) -> bool {
     VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
 }
 
+fn is_svg_void_element(name: &str) -> bool {
+    SVG_VOID_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
 fn is_verbatim_element(name: &str) -> bool {
     VERBATIM_ELEMENTS.contains(&name.to_lowercase().as_str())
+}
+
+fn render_comment(body: &str) -> String {
+    if body.starts_with('[') || body.starts_with("<!") {
+        format!("<!--{body}-->")
+    } else {
+        format!("<!-- {body} -->")
+    }
 }
 
 fn leading_whitespace_len(line: &str) -> usize {
@@ -82,7 +99,8 @@ fn is_block_element(name: &str) -> bool {
 
 fn is_inline_content(children: &[Node]) -> bool {
     children.iter().all(|c| match c {
-        Node::Text(_) | Node::PhpEcho(_) => true,
+        Node::Text(_) => true,
+        Node::PhpEcho(code) => !contains_heredoc(code),
         Node::PhpBlock(code) => is_single_echo_block(code),
         Node::Element { .. } | Node::Doctype(_) | Node::Comment(_) => false,
     })
@@ -206,7 +224,16 @@ impl Formatter {
         output.push_str(&format!("{pad}</{name}>\n"));
     }
 
-    fn emit_element(&self, name: &str, attributes: &[Attribute], children: &[Node], ctx: (usize, &mut String)) {
+    fn emit_element(&self, el: &Node, ctx: (usize, &mut String)) {
+        let Node::Element {
+            name,
+            attributes,
+            children,
+            foreign,
+        } = el
+        else {
+            return;
+        };
         let (depth, output) = ctx;
         if is_verbatim_element(name) {
             self.emit_verbatim_element(name, attributes, children, (depth, output));
@@ -223,6 +250,8 @@ impl Formatter {
                 .all(|c| matches!(c, Node::Text(s) if s.trim().is_empty()));
         if children.is_empty() && is_void_element(name) {
             self.emit_open_tag(name, attributes, &pad, output);
+        } else if is_empty && *foreign && is_svg_void_element(name) {
+            self.emit_self_closing_tag(name, attributes, &pad, output);
         } else if is_empty {
             self.emit_empty_element(name, attributes, &pad, output);
         } else if is_inline_content(children) && fits_inline_element(name, children) {
@@ -320,7 +349,8 @@ fn is_inline_element_node(node: &Node) -> bool {
 }
 
 fn is_inline_run_start(node: &Node) -> bool {
-    matches!(node, Node::Text(_) | Node::PhpEcho(_))
+    matches!(node, Node::Text(_))
+        || matches!(node, Node::PhpEcho(code) if !contains_heredoc(code))
         || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
         || is_inline_element_node(node)
 }
@@ -338,6 +368,7 @@ fn render_node_inline(node: &Node) -> String {
             name,
             attributes,
             children,
+            ..
         } => {
             if is_void_element(name) {
                 let attrs = format_attributes(attributes);
@@ -367,7 +398,7 @@ fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
                 end += 1;
             }
             Node::PhpEcho(code) => {
-                if is_echo_block_opener(code) || is_echo_block_closer(code) {
+                if is_echo_block_opener(code) || is_echo_block_closer(code) || contains_heredoc(code) {
                     break;
                 }
                 has_echo = true;
@@ -404,7 +435,8 @@ fn render_inline_run(nodes: &[Node]) -> String {
 }
 
 fn is_echo_like(node: &Node) -> bool {
-    matches!(node, Node::PhpEcho(_)) || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
+    matches!(node, Node::PhpEcho(code) if !contains_heredoc(code))
+        || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
 }
 
 fn is_inline_atom(node: &Node) -> bool {
@@ -546,12 +578,8 @@ impl Formatter {
         }
 
         match &nodes[i] {
-            Node::Element {
-                name,
-                attributes,
-                children,
-            } => {
-                self.emit_element(name, attributes, children, (state.depth, output));
+            el @ Node::Element { .. } => {
+                self.emit_element(el, (state.depth, output));
             }
             Node::Text(s) => {
                 let trimmed = s.trim();
@@ -573,7 +601,7 @@ impl Formatter {
             }
             Node::PhpEcho(code) => self.emit_php_echo(code, pad, state, output),
             Node::Doctype(s) => output.push_str(&format!("{pad}<!DOCTYPE {s}>\n")),
-            Node::Comment(s) => output.push_str(&format!("{pad}<!-- {s} -->\n")),
+            Node::Comment(s) => output.push_str(&format!("{pad}{}\n", render_comment(s))),
         }
 
         i + 1
@@ -590,11 +618,12 @@ impl Formatter {
             Node::PhpBlock(code) => output.push_str(&format!("{pad}<?php {} ?>\n", code.trim())),
             Node::PhpEcho(code) => output.push_str(&format!("{pad}<?= {} ?>\n", code.trim())),
             Node::Doctype(s) => output.push_str(&format!("{pad}<!DOCTYPE {s}>\n")),
-            Node::Comment(s) => output.push_str(&format!("{pad}<!-- {s} -->\n")),
+            Node::Comment(s) => output.push_str(&format!("{pad}{}\n", render_comment(s))),
             Node::Element {
                 name,
                 attributes,
                 children,
+                ..
             } => {
                 let attrs = format_attributes(attributes);
                 output.push_str(&format!("{pad}<{name}{attrs}>\n"));

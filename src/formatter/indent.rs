@@ -1,10 +1,11 @@
 use super::Formatter;
+use super::declaration::apply_psr12_declarations;
 use super::docblock::{extract_docblock_body, merge_descriptions_and_vars};
 use super::normalize::{join_logical_lines, join_ternary_lines, normalize_statements};
 use super::php::format_php_code;
 use super::scan::{
     contains_outside_strings, count_brackets, count_leading_closers, count_unescaped_quotes, detect_heredoc,
-    detect_open_quote, has_unclosed_string,
+    detect_open_quote, has_unclosed_string, is_declare_stmt, is_use_import_line,
 };
 
 pub fn visual_len(s: &str) -> usize {
@@ -47,14 +48,37 @@ pub fn is_header_php_block(code: &str) -> bool {
     if code.trim_start().starts_with("/**") && !is_php_block_opener(code) {
         return true;
     }
-    let has_by_line = code.lines().any(|line| {
-        let t = line.trim();
-        t.starts_with("use ") || t.starts_with("declare(")
-    });
-    if has_by_line {
-        return true;
+    code.lines().any(|line| is_declare_stmt(line.trim())) || has_use_import(code)
+}
+
+fn has_use_import(code: &str) -> bool {
+    let bytes = code.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        let b = bytes[i];
+        if b == b'\'' || b == b'"' {
+            i += 1;
+            while i < len && bytes[i] != b {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+        if matches!(b, b'u' | b'U') {
+            let bounded = i == 0 || !matches!(bytes[i - 1], c if c.is_ascii_alphanumeric() || c == b'_' || c == b'$');
+            if bounded && is_use_import_line(&code[i..]) {
+                return true;
+            }
+        }
+        i += 1;
     }
-    code.contains(" use ") || code.contains(";use ") || code.starts_with("use ")
+    false
 }
 
 pub fn split_header_and_opener(code: &str) -> Option<(String, String)> {
@@ -171,6 +195,12 @@ fn split_trailing_array_item_close(line: &str) -> Option<(String, String)> {
 }
 
 impl Formatter {
+    pub(crate) fn reindent_declaration_block(&self, code: &str, pad: &str) -> String {
+        let normalized = normalize_statements(code);
+        let transformed = apply_psr12_declarations(&normalized);
+        Reindenter::new(self, pad, ReindentMode::Declaration).run(&transformed)
+    }
+
     pub(crate) fn reindent_php_block(&self, code: &str, pad: &str) -> String {
         let needs_normalize = !code.contains('\n') && (code.contains(';') || has_switch_case(code));
         let code = if needs_normalize {
@@ -178,15 +208,26 @@ impl Formatter {
         } else {
             join_logical_lines(&join_ternary_lines(code))
         };
-        let is_header = is_header_php_block(&code);
-        Reindenter::new(self, pad, is_header).run(&code)
+        let mode = if is_header_php_block(&code) {
+            ReindentMode::Header
+        } else {
+            ReindentMode::Inline
+        };
+        Reindenter::new(self, pad, mode).run(&code)
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReindentMode {
+    Header,
+    Inline,
+    Declaration,
 }
 
 struct Reindenter<'a> {
     fmt: &'a Formatter,
     pad: &'a str,
-    is_header: bool,
+    mode: ReindentMode,
     result: String,
     depth: i32,
     switch_levels: Vec<(i32, bool)>,
@@ -204,11 +245,11 @@ struct Reindenter<'a> {
 }
 
 impl<'a> Reindenter<'a> {
-    fn new(fmt: &'a Formatter, pad: &'a str, is_header: bool) -> Self {
+    fn new(fmt: &'a Formatter, pad: &'a str, mode: ReindentMode) -> Self {
         Self {
             fmt,
             pad,
-            is_header,
+            mode,
             result: String::new(),
             depth: 0,
             switch_levels: Vec::new(),
@@ -251,19 +292,26 @@ impl<'a> Reindenter<'a> {
             self.handle_blank();
             return;
         }
-        if self.first_content && !self.prev_blank && self.is_header {
+        if self.first_content && !self.prev_blank && self.mode == ReindentMode::Header {
             self.result.push('\n');
         }
         self.first_content = false;
-        let is_use_import = trimmed.starts_with("use ");
-        let is_declare = trimmed.starts_with("declare(");
+        let is_use_import = is_use_import_line(trimmed);
+        let canonical_use;
+        let trimmed = if is_use_import && !trimmed.starts_with("use ") {
+            canonical_use = format!("use {}", trimmed[3..].trim_start());
+            canonical_use.as_str()
+        } else {
+            trimmed
+        };
+        let is_declare = is_declare_stmt(trimmed);
         if self.absorb_pending(trimmed, is_use_import, is_declare) {
             return;
         }
         if self.prev_was_declare && !is_declare && !self.prev_blank {
             self.result.push('\n');
         }
-        if self.prev_was_doc_close && !self.prev_blank {
+        if self.prev_was_doc_close && !self.prev_blank && self.mode != ReindentMode::Declaration {
             self.result.push('\n');
         }
         self.prev_blank = false;
@@ -327,7 +375,7 @@ impl<'a> Reindenter<'a> {
         let all_var = !self.docblock_bodies.is_empty() && self.docblock_bodies.iter().all(|b| b.starts_with("@var "));
         if all_var {
             self.pending_docblocks.append(&mut self.docblock_bodies);
-        } else if self.is_header {
+        } else if self.mode == ReindentMode::Header {
             self.pending_descriptions.append(&mut self.docblock_bodies);
         } else {
             self.flush_pending_docblocks();
@@ -471,9 +519,9 @@ fn sort_use_lines(code: &str) -> String {
 
     while i < lines.len() {
         let trimmed = lines[i].trim();
-        if trimmed.starts_with("use ") && trimmed.ends_with(';') {
+        if is_use_import_line(trimmed) && trimmed.ends_with(';') {
             let mut use_group: Vec<&str> = Vec::new();
-            while i < lines.len() && lines[i].trim().starts_with("use ") && lines[i].trim().ends_with(';') {
+            while i < lines.len() && is_use_import_line(lines[i].trim()) && lines[i].trim().ends_with(';') {
                 use_group.push(lines[i]);
                 i += 1;
             }
@@ -499,7 +547,7 @@ fn emit_deferred_lines(formatter: &Formatter, deferred: &[String], pad: &str, de
     let mut declares = Vec::new();
     let mut others = Vec::new();
     for dl in deferred {
-        if dl.trim().starts_with("declare(") {
+        if is_declare_stmt(dl.trim()) {
             declares.push(dl.clone());
         } else {
             others.push(dl.clone());

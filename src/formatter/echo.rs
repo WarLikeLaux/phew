@@ -2,8 +2,8 @@ use super::Formatter;
 use super::indent::visual_len;
 use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
 use super::scan::{
-    contains_outside_strings, find_array_arrow, find_matching_close, find_ternary_positions, has_expandable_closure,
-    split_by_commas,
+    contains_heredoc, contains_outside_strings, find_array_arrow, find_matching_close, find_ternary_positions,
+    has_expandable_closure, split_by_commas,
 };
 
 const WIDGET_MARKER: &str = "::widget(";
@@ -95,6 +95,9 @@ impl Formatter {
     }
 
     pub fn format_echo(&self, code: &str, pad: &str) -> String {
+        if contains_heredoc(code) {
+            return format_heredoc_echo(code, pad);
+        }
         let joined = join_php_lines(code);
         let formatted = format_php_code(&joined);
         let single = format!("{pad}<?= {formatted} ?>");
@@ -161,6 +164,18 @@ impl Formatter {
         }
         format!("{inner_pad}{arg},\n")
     }
+}
+
+fn format_heredoc_echo(code: &str, pad: &str) -> String {
+    let mut lines = code.lines();
+    let first = lines.next().unwrap_or("").trim();
+    let mut result = format!("{pad}<?= {first}");
+    for line in lines {
+        result.push('\n');
+        result.push_str(line.trim_end());
+    }
+    result.push_str(" ?>\n");
+    result
 }
 
 pub fn contains_break(code: &str) -> bool {

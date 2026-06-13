@@ -1,4 +1,4 @@
-use super::scan::{find_matching_close, split_by_commas};
+use super::scan::{find_matching_close, is_declare_stmt, split_by_commas};
 
 const PHP_KEYWORDS: &[&str] = &[
     "if", "elseif", "else", "foreach", "for", "while", "switch", "catch", "match", "fn", "function",
@@ -9,7 +9,7 @@ pub fn format_php_code(code: &str) -> String {
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
     let mut i = 0;
-    let preserve_declare_equal = code.trim_start().starts_with("declare(");
+    let preserve_declare_equal = is_declare_stmt(code.trim_start());
 
     while i < len {
         let ch = chars[i];
@@ -48,7 +48,8 @@ pub fn format_php_code(code: &str) -> String {
         }
 
         if ch.is_alphabetic() {
-            i = format_keyword(&chars, i, &mut result);
+            let at_boundary = at_keyword_boundary(&result);
+            i = format_keyword(&chars, i, &mut result, at_boundary);
             continue;
         }
 
@@ -386,7 +387,11 @@ fn format_assignment_equal(chars: &[char], start: usize, result: &mut String) ->
     i
 }
 
-fn format_keyword(chars: &[char], start: usize, result: &mut String) -> usize {
+fn at_keyword_boundary(result: &str) -> bool {
+    !result.ends_with(|c: char| c == '$' || c == '>' || c == ':' || c == '\\' || c == '_' || c.is_alphanumeric())
+}
+
+fn format_keyword(chars: &[char], start: usize, result: &mut String, at_boundary: bool) -> usize {
     let len = chars.len();
     let mut i = start;
 
@@ -395,7 +400,18 @@ fn format_keyword(chars: &[char], start: usize, result: &mut String) -> usize {
     }
     let word: String = chars[start..i].iter().collect();
 
-    if PHP_KEYWORDS.contains(&word.as_str()) && i < len && chars[i] == '(' {
+    if at_boundary && word.eq_ignore_ascii_case("declare") {
+        let mut j = i;
+        while j < len && chars[j] == ' ' {
+            j += 1;
+        }
+        if j < len && chars[j] == '(' {
+            result.push_str(&word);
+            return j;
+        }
+    }
+
+    if at_boundary && PHP_KEYWORDS.contains(&word.as_str()) && i < len && chars[i] == '(' {
         result.push_str(&word);
         result.push(' ');
     } else {

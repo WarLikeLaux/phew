@@ -56,6 +56,14 @@ impl Iterator for PhpCursor<'_> {
                 }
                 continue;
             }
+            if ch == '/' && self.pos + 1 < len && self.chars[self.pos + 1] == '*' {
+                self.pos += 2;
+                while self.pos + 1 < len && !(self.chars[self.pos] == '*' && self.chars[self.pos + 1] == '/') {
+                    self.pos += 1;
+                }
+                self.pos = (self.pos + 2).min(len);
+                continue;
+            }
             let index = self.pos;
             self.pos += 1;
             if matches!(ch, '(' | '[' | '{') {
@@ -463,6 +471,28 @@ pub fn find_array_arrow(arg: &str) -> Option<(usize, usize)> {
     }
     let arrow_pos = arg[i..].find("=>")?;
     Some((i, arrow_pos))
+}
+
+pub(crate) fn contains_heredoc(code: &str) -> bool {
+    code.contains('\n') && contains_outside_strings(code, "<<<")
+}
+
+pub(crate) fn is_declare_stmt(s: &str) -> bool {
+    s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("declare")) && s[7..].trim_start().starts_with('(')
+}
+
+pub(crate) fn is_use_import_line(s: &str) -> bool {
+    if !s.get(..3).is_some_and(|p| p.eq_ignore_ascii_case("use")) {
+        return false;
+    }
+    let after = &s[3..];
+    if !after.starts_with(|c: char| c.is_whitespace()) {
+        return false;
+    }
+    matches!(
+        after.trim_start().chars().next(),
+        Some(c) if c.is_alphabetic() || c == '\\' || c == '_'
+    )
 }
 
 pub fn contains_outside_strings(code: &str, needle: &str) -> bool {
