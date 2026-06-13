@@ -342,7 +342,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("{e}");
+            eprintln!("{e:#}");
             ExitCode::FAILURE
         }
     }
