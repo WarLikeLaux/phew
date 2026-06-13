@@ -4,6 +4,8 @@ default:
 help:
     @just --list
 
+alias pf := pack-fixtures
+
 dev: fmt lint
     @echo "✅ dev ok"
 
@@ -30,6 +32,10 @@ fix *args:
 
 fixtures:
     ./bin/check-fixtures
+
+pack-fixtures:
+    @command -v npx >/dev/null 2>&1 || { echo "npx не установлен"; exit 127; }
+    npx -y repomix@1.14.1 --include "tests/fixtures/expected/**" --output packed-fixtures.xml --style xml
 
 clean:
     cargo clean

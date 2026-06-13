@@ -2,4 +2,4 @@
 .diff-parts
 .env
 node_modules
-fixtures-expected.xml
+packed-fixtures.xml
