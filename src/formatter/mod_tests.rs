@@ -203,6 +203,16 @@ fn closure_in_multi_statement_block_always_wraps() {
 }
 
 #[test]
+fn anonymous_class_method_body_uses_allman_block() {
+    let src = "<?php $handler = new class {\npublic function run(): int { return 42; }\n}; ?>";
+    let out = Formatter::default().format_source(src);
+    assert_eq!(
+        out,
+        "<?php $handler = new class {\n    public function run(): int\n    {\n        return 42;\n    }\n}; ?>\n"
+    );
+}
+
+#[test]
 fn braces_in_comments_do_not_shift_indentation() {
     let src = "<?php\nclass C {\npublic function a() {\n/* open { brace */\nreturn 1;\n}\npublic function b() { return 2; }\n}\n";
     let out = Formatter::default().format_source(src);

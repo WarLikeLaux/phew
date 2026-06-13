@@ -5,8 +5,19 @@ use super::normalize::{join_logical_lines, join_ternary_lines, normalize_stateme
 use super::php::format_php_code;
 use super::scan::{
     contains_outside_strings, count_brackets, count_leading_closers, count_unescaped_quotes, detect_heredoc,
-    detect_open_quote, has_unclosed_string, is_declare_stmt, is_use_import_line,
+    detect_open_quote, find_closure_body, has_unclosed_string, is_declare_stmt, is_use_import_line,
+    normalize_closure_body,
 };
+
+const FUNCTION_MODIFIERS: &[&str] = &[
+    "public",
+    "private",
+    "protected",
+    "static",
+    "final",
+    "abstract",
+    "readonly",
+];
 
 pub fn visual_len(s: &str) -> usize {
     s.chars().count()
@@ -79,6 +90,48 @@ fn has_use_import(code: &str) -> bool {
         i += 1;
     }
     false
+}
+
+fn leading_word(s: &str) -> (&str, &str) {
+    let trimmed = s.trim_start();
+    let end = trimmed
+        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .unwrap_or(trimmed.len());
+    (&trimmed[..end], trimmed[end..].trim_start())
+}
+
+fn is_named_function_line(line: &str) -> bool {
+    let mut rest = line.trim_start();
+    loop {
+        let (word, after) = leading_word(rest);
+        if word.is_empty() {
+            return false;
+        }
+        if FUNCTION_MODIFIERS.contains(&word) {
+            rest = after;
+            continue;
+        }
+        if word != "function" {
+            return false;
+        }
+        return after.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '&');
+    }
+}
+
+fn split_inline_named_function(line: &str) -> Option<(String, Vec<String>, String)> {
+    if !is_named_function_line(line) {
+        return None;
+    }
+    let (open, close) = find_closure_body(line)?;
+    let chars: Vec<char> = line.chars().collect();
+    let body: String = chars[open + 1..close].iter().collect();
+    let stmts = normalize_closure_body(&body);
+    if stmts.is_empty() {
+        return None;
+    }
+    let header: String = chars[..open].iter().collect();
+    let suffix: String = chars[close + 1..].iter().collect();
+    Some((header.trim_end().to_string(), stmts, suffix.trim_start().to_string()))
 }
 
 pub fn split_header_and_opener(code: &str) -> Option<(String, String)> {
@@ -449,6 +502,9 @@ impl<'a> Reindenter<'a> {
 
     fn emit_code(&mut self, trimmed: &str) {
         let formatted = format_php_code(trimmed);
+        if self.emit_inline_named_function(&formatted) {
+            return;
+        }
         let lower_fmt = formatted.to_lowercase();
         let is_switch_opener = lower_fmt.starts_with("switch") && formatted.ends_with('{');
         let is_case_label = lower_fmt.starts_with("case ") || lower_fmt.starts_with("default:");
@@ -467,6 +523,25 @@ impl<'a> Reindenter<'a> {
         } else if has_unclosed_string(trimmed) {
             self.in_string = detect_open_quote(trimmed);
         }
+    }
+
+    fn emit_inline_named_function(&mut self, formatted: &str) -> bool {
+        let Some((header, stmts, suffix)) = split_inline_named_function(formatted) else {
+            return false;
+        };
+        let fmt = self.fmt;
+        fmt.emit_reindented_line(&header, self.pad, &mut self.depth, &mut self.result);
+        fmt.emit_reindented_line("{", self.pad, &mut self.depth, &mut self.result);
+        for stmt in &stmts {
+            fmt.emit_reindented_line(stmt, self.pad, &mut self.depth, &mut self.result);
+        }
+        let close = if suffix.is_empty() {
+            "}".to_string()
+        } else {
+            format!("}} {suffix}")
+        };
+        fmt.emit_reindented_line(&close, self.pad, &mut self.depth, &mut self.result);
+        true
     }
 
     fn case_extra(&self, is_case_label: bool, closes_block: bool) -> usize {
