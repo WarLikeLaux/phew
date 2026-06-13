@@ -152,7 +152,7 @@ fn script_raw_text() {
         tokenize("<script>if (a < b) { alert(1); }</script>"),
         vec![
             open("script", vec![]),
-            text("if (a < b) { alert(1); }".into()),
+            text("if (a < b) { alert(1); }"),
             close("script"),
         ]
     );
@@ -162,11 +162,7 @@ fn script_raw_text() {
 fn style_raw_text() {
     assert_eq!(
         tokenize("<style>.a > .b { color: red; }</style>"),
-        vec![
-            open("style", vec![]),
-            text(".a > .b { color: red; }".into()),
-            close("style"),
-        ]
+        vec![open("style", vec![]), text(".a > .b { color: red; }"), close("style"),]
     );
 }
 
@@ -176,7 +172,7 @@ fn script_with_attributes() {
         tokenize(r#"<script type="text/javascript">var x = 1;</script>"#),
         vec![
             open("script", vec![("type", Some("text/javascript"))]),
-            text("var x = 1;".into()),
+            text("var x = 1;"),
             close("script"),
         ]
     );

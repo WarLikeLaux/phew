@@ -6,6 +6,14 @@ rust-version = "1.85"
 description = "Fast HTML + PHP formatter for Yii 2 view files"
 license = "MIT"
 repository = "https://github.com/WarLikeLaux/phew"
+exclude = [
+    ".claude/**",
+    ".github/**",
+    ".vscode/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/ai/**",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
