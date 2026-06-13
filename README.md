@@ -10,7 +10,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-125_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-181_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-183_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
 [![Version](https://img.shields.io/badge/Version-1.0.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
@@ -192,7 +192,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**125 unit-тестов**, **181 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Часть input-фикстур намеренно не проходит `php -l`: они проверяют recovery/normalization сценарии вроде дедупликации `use`, переноса `declare(strict_types=1)` и legacy short open tag. Expected-фикстуры обязаны быть чистыми: без табов, trailing whitespace, строк длиннее 120 символов. PHP expected дополнительно проверяются через `php -l`, если PHP CLI доступен. Полная проверка перед коммитом:
+**125 unit-тестов**, **183 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Часть input-фикстур намеренно не проходит `php -l`: они проверяют recovery/normalization сценарии вроде дедупликации `use`, переноса `declare(strict_types=1)` и legacy short open tag. Expected-фикстуры обязаны быть чистыми: без табов, trailing whitespace, строк длиннее 120 символов. PHP expected дополнительно проверяются через `php -l`, если PHP CLI доступен. Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures

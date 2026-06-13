@@ -2,7 +2,7 @@ use super::Formatter;
 use super::attrs::format_attributes;
 use super::docblock::is_docblock_only;
 use super::echo::{is_echo_block_closer, is_echo_block_opener, is_single_echo_block};
-use super::indent::{is_header_php_block, visual_len};
+use super::indent::{is_header_php_block, is_php_block_opener, is_switch_case_peer, visual_len};
 use super::php::{format_php_code, join_php_lines};
 use super::php_emit::PhpDepthState;
 use super::scan::contains_heredoc;
@@ -544,6 +544,27 @@ fn try_merge_header_blocks(nodes: &[Node], start: usize, code: &str) -> Option<(
     merged_any.then_some((merged, j))
 }
 
+fn try_merge_switch_case_blocks(nodes: &[Node], start: usize, code: &str) -> Option<(String, usize)> {
+    let current = code.trim();
+    if !current.to_lowercase().starts_with("switch") || !is_php_block_opener(current) {
+        return None;
+    }
+    match nodes.get(start + 1) {
+        Some(Node::PhpBlock(next)) if is_switch_case_peer(next) => {
+            Some((format!("{current}\n{}", next.trim()), start + 2))
+        }
+        Some(
+            Node::Element { .. }
+            | Node::Text(_)
+            | Node::PhpBlock(_)
+            | Node::PhpEcho(_)
+            | Node::Doctype(_)
+            | Node::Comment(_),
+        )
+        | None => None,
+    }
+}
+
 impl Formatter {
     fn format_nodes(&self, nodes: &[Node], depth: usize, output: &mut String) {
         let mut state = PhpDepthState {
@@ -598,6 +619,10 @@ impl Formatter {
                 }
             }
             Node::PhpBlock(code) => {
+                if let Some((merged, j)) = try_merge_switch_case_blocks(nodes, i, code) {
+                    self.emit_php_block(&merged, pad, state, output);
+                    return j;
+                }
                 if state.depth == 0 {
                     if let Some((merged, j)) = try_merge_header_blocks(nodes, i, code) {
                         self.emit_php_block(&merged, pad, state, output);
