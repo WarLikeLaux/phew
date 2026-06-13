@@ -147,7 +147,7 @@ fn parse_tag(tag_content: &str) -> Token {
         trimmed
     };
 
-    let (name, rest) = match body.find(|c: char| c.is_whitespace()) {
+    let (name, rest) = match body.find(|c: char| c.is_whitespace() || c == '<') {
         Some(pos) => (&body[..pos], body[pos..].trim_start()),
         None => (body, ""),
     };

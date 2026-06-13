@@ -114,10 +114,29 @@ pub fn emit_docblock_php(code: &str, pad: &str, output: &mut String) {
     output.push_str(&format!("{pad}<?php\n"));
     for line in docblock.lines() {
         output.push_str(pad);
-        output.push_str(line.trim_end());
+        output.push_str(&normalize_docblock_line(line));
         output.push('\n');
     }
     output.push_str(&format!("{pad}?>\n"));
+}
+
+fn normalize_docblock_line(line: &str) -> String {
+    let trimmed = line.trim();
+    if trimmed == "/**" {
+        return trimmed.to_string();
+    }
+    if trimmed == "*/" || trimmed == "**/" {
+        return " */".to_string();
+    }
+    if let Some(body) = trimmed.strip_prefix('*') {
+        let body = body.trim_start();
+        return if body.is_empty() {
+            " *".to_string()
+        } else {
+            format!(" * {body}")
+        };
+    }
+    trimmed.to_string()
 }
 
 #[cfg(test)]

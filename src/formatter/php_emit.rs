@@ -50,6 +50,11 @@ fn is_self_contained_brace_switch(code: &str) -> bool {
 impl Formatter {
     fn emit_switch_stmt(&self, trimmed: &str, state: &mut PhpDepthState, output: &mut String) {
         let indent = &self.indent;
+        if is_docblock_only(trimmed) {
+            let pad = indent.repeat(state.depth);
+            emit_docblock_php(trimmed, &pad, output);
+            return;
+        }
         let formatted = format_php_code(trimmed);
         let lower = trimmed.to_lowercase();
         if lower.starts_with("switch") && is_php_block_opener(trimmed) {

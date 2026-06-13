@@ -13,6 +13,8 @@ pub mod split;
 use crate::config::Config;
 use crate::parser::{ast, lexer};
 
+const MAX_FORMAT_PASSES: usize = 4;
+
 #[derive(Debug)]
 pub struct Formatter {
     indent: String,
@@ -29,6 +31,18 @@ impl Formatter {
 
     pub fn format_source(&self, source: &str) -> String {
         let source = source.strip_prefix('\u{FEFF}').unwrap_or(source);
+        let mut current = self.format_once(source);
+        for _ in 1..MAX_FORMAT_PASSES {
+            let next = self.format_once(&current);
+            if next == current {
+                return current;
+            }
+            current = next;
+        }
+        current
+    }
+
+    fn format_once(&self, source: &str) -> String {
         let tokens = lexer::tokenize(source);
         let nodes = ast::parse(tokens);
         self.format(&nodes)

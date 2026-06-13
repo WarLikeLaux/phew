@@ -75,6 +75,17 @@ fn docblock_only_cases() {
 }
 
 #[test]
+fn emit_docblock_php_normalizes_existing_indent() {
+    let mut output = String::new();
+    emit_docblock_php(
+        "        /**\n         * @var Foo $foo\n         */",
+        "    ",
+        &mut output,
+    );
+    assert_eq!(output, "    <?php\n    /**\n     * @var Foo $foo\n     */\n    ?>\n");
+}
+
+#[test]
 fn normalize_var_cases() {
     assert_var_normalize_cases(&[
         ("@var $model User", "@var User $model"),

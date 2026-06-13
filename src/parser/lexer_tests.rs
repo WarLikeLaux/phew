@@ -100,6 +100,21 @@ fn multiple_attributes() {
 }
 
 #[test]
+fn dynamic_php_attribute_after_tag_name() {
+    assert_eq!(
+        tokenize(r#"<td<?= !$is_trial ? ' style="text-align: right;"' : '' ?>>x</td>"#),
+        vec![
+            open(
+                "td",
+                vec![(r#"<?= !$is_trial ? ' style="text-align: right;"' : '' ?>"#, None)]
+            ),
+            text("x"),
+            close("td"),
+        ]
+    );
+}
+
+#[test]
 fn boolean_attribute() {
     assert_eq!(
         tokenize("<input disabled />"),

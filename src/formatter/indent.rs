@@ -606,7 +606,10 @@ fn sort_use_lines(code: &str) -> String {
             for line in use_group {
                 result.push(line.to_string());
             }
-            if i < lines.len() && !lines[i].trim().is_empty() {
+            while i < lines.len() && lines[i].trim().is_empty() {
+                i += 1;
+            }
+            if i < lines.len() {
                 result.push(String::new());
             }
         } else {
