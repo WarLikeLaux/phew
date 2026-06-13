@@ -31,6 +31,9 @@ impl Formatter {
 
     pub fn format_source(&self, source: &str) -> String {
         let source = source.strip_prefix('\u{FEFF}').unwrap_or(source);
+        if is_php_codegen_template(source) {
+            return source.to_string();
+        }
         let mut current = self.format_once(source);
         for _ in 1..MAX_FORMAT_PASSES {
             let next = self.format_once(&current);
@@ -47,6 +50,10 @@ impl Formatter {
         let nodes = ast::parse(tokens);
         self.format(&nodes)
     }
+}
+
+fn is_php_codegen_template(source: &str) -> bool {
+    source.contains("echo \"<?php\\n\";")
 }
 
 impl Default for Formatter {

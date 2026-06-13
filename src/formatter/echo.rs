@@ -8,7 +8,7 @@ use super::scan::{
 
 const WIDGET_MARKER: &str = "::widget(";
 
-fn contains_line_comment(code: &str) -> bool {
+pub(crate) fn contains_line_comment(code: &str) -> bool {
     let chars: Vec<char> = code.chars().collect();
     let len = chars.len();
     let mut i = 0;
@@ -233,19 +233,32 @@ fn format_multiline_echo(code: &str, pad: &str) -> String {
         [] => format!("{pad}<?= ?>\n"),
         [single] => format!("{pad}<?= {} ?>\n", single.trim()),
         [first, rest @ ..] => {
+            let common = common_leading_whitespace(rest);
             let mut result = format!("{pad}<?= {}\n", first.trim_start());
             for line in &rest[..rest.len().saturating_sub(1)] {
                 result.push_str(pad);
-                result.push_str(line.trim_end());
+                result.push_str(strip_leading_width(line, common).trim_end());
                 result.push('\n');
             }
             let last = rest.last().copied().unwrap_or("");
             result.push_str(pad);
-            result.push_str(last.trim_end());
+            result.push_str(strip_echo_semicolon(strip_leading_width(last, common)));
             result.push_str(" ?>\n");
             result
         }
     }
+}
+
+fn common_leading_whitespace(lines: &[&str]) -> usize {
+    lines
+        .iter()
+        .map(|line| line.len() - line.trim_start().len())
+        .min()
+        .unwrap_or(0)
+}
+
+fn strip_leading_width(line: &str, width: usize) -> &str {
+    line.get(width..).unwrap_or_else(|| line.trim_start())
 }
 
 fn format_heredoc_echo(code: &str, pad: &str) -> String {

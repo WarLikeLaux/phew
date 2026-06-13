@@ -1,7 +1,7 @@
 use super::Formatter;
 use super::attrs::format_attributes;
 use super::docblock::is_docblock_only;
-use super::echo::{is_echo_block_closer, is_echo_block_opener, is_single_echo_block};
+use super::echo::{contains_line_comment, is_echo_block_closer, is_echo_block_opener, is_single_echo_block};
 use super::indent::{is_header_php_block, is_php_block_opener, is_switch_case_peer, visual_len};
 use super::php::{format_php_code, join_php_lines};
 use super::php_emit::PhpDepthState;
@@ -100,10 +100,14 @@ fn is_block_element(name: &str) -> bool {
 fn is_inline_content(children: &[Node]) -> bool {
     children.iter().all(|c| match c {
         Node::Text(_) => true,
-        Node::PhpEcho(code) => !contains_heredoc(code),
+        Node::PhpEcho(code) => is_inline_echo_code(code),
         Node::PhpBlock(code) => is_single_echo_block(code),
         Node::Element { .. } | Node::Doctype(_) | Node::Comment(_) => false,
     })
+}
+
+fn is_inline_echo_code(code: &str) -> bool {
+    !code.contains('\n') && !contains_heredoc(code) && !contains_line_comment(code)
 }
 
 fn is_inline_flow(children: &[Node]) -> bool {
@@ -352,7 +356,7 @@ fn is_inline_element_node(node: &Node) -> bool {
 
 fn is_inline_run_start(node: &Node) -> bool {
     matches!(node, Node::Text(_))
-        || matches!(node, Node::PhpEcho(code) if !contains_heredoc(code))
+        || matches!(node, Node::PhpEcho(code) if is_inline_echo_code(code))
         || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
         || is_inline_element_node(node)
 }
@@ -400,7 +404,7 @@ fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
                 end += 1;
             }
             Node::PhpEcho(code) => {
-                if is_echo_block_opener(code) || is_echo_block_closer(code) || contains_heredoc(code) {
+                if is_echo_block_opener(code) || is_echo_block_closer(code) || !is_inline_echo_code(code) {
                     break;
                 }
                 has_echo = true;
@@ -437,7 +441,7 @@ fn render_inline_run(nodes: &[Node]) -> String {
 }
 
 fn is_echo_like(node: &Node) -> bool {
-    matches!(node, Node::PhpEcho(code) if !contains_heredoc(code))
+    matches!(node, Node::PhpEcho(code) if is_inline_echo_code(code))
         || matches!(node, Node::PhpBlock(code) if is_single_echo_block(code))
 }
 
