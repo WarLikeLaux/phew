@@ -2,6 +2,7 @@
 set -uo pipefail
 
 DIR="tests/fixtures"
+MAX_LINE_LENGTH=120
 PASS=0
 FAIL=0
 TOTAL=0
@@ -40,8 +41,46 @@ fi
 
 shopt -s nullglob
 
+check_expected_quality() {
+    local expected="$1"
+    local name line_no line length lint_out lint_code
+
+    name=$(basename "$expected")
+
+    if grep -n $'\t' "$expected" >/dev/null; then
+        ERRORS+="  ✗ $name (expected contains tab characters)\n"
+        FAIL=$((FAIL + 1))
+    fi
+
+    if grep -nE '[[:blank:]]$' "$expected" >/dev/null; then
+        ERRORS+="  ✗ $name (expected contains trailing whitespace)\n"
+        FAIL=$((FAIL + 1))
+    fi
+
+    line_no=0
+    while IFS= read -r line || [ -n "$line" ]; do
+        line_no=$((line_no + 1))
+        length=${#line}
+        if [ "$length" -gt "$MAX_LINE_LENGTH" ]; then
+            ERRORS+="  ✗ $name:$line_no (expected line length $length > $MAX_LINE_LENGTH)\n"
+            FAIL=$((FAIL + 1))
+        fi
+    done <"$expected"
+
+    if [[ "$expected" == *.php ]] && command -v php >/dev/null 2>&1; then
+        lint_out=$(php -l "$expected" 2>&1)
+        lint_code=$?
+        if [ "$lint_code" -ne 0 ]; then
+            lint_out=$(printf '%s' "$lint_out" | tr '\n\t' '  ' | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//')
+            ERRORS+="  ✗ $name (expected php -l failed: $lint_out)\n"
+            FAIL=$((FAIL + 1))
+        fi
+    fi
+}
+
 for expected in "$DIR"/expected/*; do
     name=$(basename "$expected")
+    check_expected_quality "$expected"
     if [ ! -f "$DIR/input/$name" ]; then
         ERRORS+="  ⚠ orphan expected (no input): $name\n"
         FAIL=$((FAIL + 1))

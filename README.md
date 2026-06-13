@@ -10,7 +10,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-123_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-169_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
+[![Fixtures](https://img.shields.io/badge/Fixtures-172_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
 [![Version](https://img.shields.io/badge/Version-1.0.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
@@ -26,7 +26,7 @@
 
 ## Зачем
 
-View-файлы Yii 2 - это `.php` с HTML, PHP-вставками, виджетами и альтернативным синтаксисом (`foreach(): ... endforeach;`) вперемешку. Готовые форматтеры с этим не справляются: **Prettier** и **HTMLBeautifier** ломаются на `<?php`, **PHP CS Fixer** не видит HTML и пропускает view-файлы, **Blade Formatter** заточен под Laravel, а **PhpStorm**/**Intelephense** живут только внутри IDE - из консоли, CI или pre-commit хука их не вызвать.
+View-файлы Yii 2 - это `.php` с HTML, PHP-вставками, виджетами и альтернативным синтаксисом (`foreach(): ... endforeach`) вперемешку. Готовые форматтеры с этим не справляются: **Prettier** и **HTMLBeautifier** ломаются на `<?php`, **PHP CS Fixer** не видит HTML и пропускает view-файлы, **Blade Formatter** заточен под Laravel, а **PhpStorm**/**Intelephense** живут только внутри IDE - из консоли, CI или pre-commit хука их не вызвать.
 
 **phew** - один CLI-инструмент, который понимает и HTML, и PHP в контексте друг друга.
 
@@ -75,7 +75,11 @@ phew -w views/ widgets/ && git add -u
 
 ```sh
 #!/bin/sh
-phew --check views/ || { echo "Запусти: phew -w views/"; exit 1; }
+if ! phew --check views/
+then
+    echo "Запусти: phew -w views/"
+    exit 1
+fi
 ```
 
 На больших проектах проверяйте только staged-файлы, чтобы не блокировать коммит из-за чужого кода в соседних файлах:
@@ -127,17 +131,17 @@ phew --indent-size 2 views/
 **До:** (всё в одну строку, без пробелов, смешанные кавычки)
 ```php
 <div class="catalog">
-<?php $form=ActiveForm::begin(['options'=>['data-config'=>'{"ajax":true,"perPage":20}']]);?>
+<?php $form=ActiveForm::begin(['options'=>['data-config'=>'{"ajax":true,"perPage":20}']])?>
 <?=$form->field($model,'category')->dropDownList($categories,['prompt'=>Yii::t('app','Выберите категорию товара')])?>
 <?=GridView::widget(['dataProvider'=>$dataProvider,'columns'=>['id',['attribute'=>'type','value'=>fn($m)=>match($m->type){'book'=>Yii::t('app','Книга'),'article'=>Yii::t('app','Статья'),default=>Yii::t('app','Неизвестно')}],['class'=>ActionColumn::class]]])?>
-<?php ActiveForm::end();?>
+<?php ActiveForm::end()?>
 </div>
 ```
 
 **После:**
 ```php
 <div class="catalog">
-    <?php $form = ActiveForm::begin(['options' => ['data-config' => '{"ajax":true,"perPage":20}']]); ?>
+    <?php $form = ActiveForm::begin(['options' => ['data-config' => '{"ajax":true,"perPage":20}']]) ?>
         <?= $form->field($model, 'category')
             ->dropDownList($categories, ['prompt' => Yii::t('app', 'Выберите категорию товара')]) ?>
         <?= GridView::widget([
@@ -155,13 +159,13 @@ phew --indent-size 2 views/
                 ['class' => ActionColumn::class],
             ],
         ]) ?>
-    <?php ActiveForm::end(); ?>
+    <?php ActiveForm::end() ?>
 </div>
 ```
 
 ## Что умеет
 
-- **HTML + PHP в едином AST** — отступы вложенных элементов и блоков, alt-синтаксис (`endforeach;`) и brace-стиль
+- **HTML + PHP в едином AST** — отступы вложенных элементов и блоков, alt-синтаксис (`endforeach`) и brace-стиль
 - **Разбивка длинных строк** (≤120) — аргументы, цепочки `->`, массивы, тернарники, `match`
 - **Yii 2** — виджеты (`GridView`, `ActiveForm`, `Nav`…), `::begin()`/`::end()`, PHP внутри атрибутов
 - **Header-блоки** — PSR-12 порядок `declare → use → docblock`, сортировка/дедуп `use`, `@var`
@@ -182,9 +186,13 @@ phew --indent-size 2 views/
 | **Trailing comma** | Да, в многострочных вызовах |
 | **EOF** | Файл заканчивается ровно одним `\n` (POSIX) |
 
+Нормализация во view-контексте намеренно выходит за рамки чистого whitespace-formatting: полная форма `<?php echo ... ?>` приводится к short echo, header-блок может быть упорядочен как `declare → use → docblock → код`, дубли `use` удаляются, а legacy short open tag нормализуется в `<?php`. Для битого HTML и странных PHP/HTML-стыков phew работает best-effort и не обещает браузерно-эквивалентный ремонт DOM.
+
+`<pre>` и `<textarea>` сохраняют внутреннее содержимое. `<script>` и `<style>` не разбираются как JS/CSS: phew нормализует только их позицию и отступ в HTML-дереве.
+
 ## Тестирование
 
-**123 unit-теста**, **169 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
+**123 unit-теста**, **172 fixture-пары** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Часть input-фикстур намеренно не проходит `php -l`: они проверяют recovery/normalization сценарии вроде дедупликации `use`, переноса `declare(strict_types=1)` и legacy short open tag. Expected-фикстуры обязаны быть чистыми: без табов, trailing whitespace, строк длиннее 120 символов. PHP expected дополнительно проверяются через `php -l`, если PHP CLI доступен. Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures
