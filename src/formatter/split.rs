@@ -288,7 +288,8 @@ impl Formatter {
             if value.starts_with('[') && value.ends_with(']') {
                 let inner = &value[1..value.len() - 1];
                 let sub_items = split_by_commas(inner);
-                if sub_items.len() > 1 || sub_items.iter().any(|s| has_expandable_closure(s)) {
+                let single_nested_array = sub_items.len() == 1 && sub_items[0].trim_start().starts_with('[');
+                if sub_items.len() > 1 || single_nested_array || sub_items.iter().any(|s| has_expandable_closure(s)) {
                     let nested_pad = format!("{pad}{indent}");
                     let mut result = format!("{pad}{key} [\n");
                     for sub in &sub_items {
@@ -591,29 +592,14 @@ impl Formatter {
             return expanded;
         }
         if item.starts_with('[') && item.ends_with(']') {
-            let sub_items = split_by_commas(&item[1..item.len() - 1]);
-            if sub_items.len() > 1 {
-                return self.format_bare_sub_array_inline(&sub_items, nested_pad);
+            if let Some(expanded) = self.expand_bare_sub_array(item, nested_pad) {
+                return expanded;
             }
         }
         if let Some(expanded) = self.expand_closure_element(item, nested_pad) {
             return expanded;
         }
         format!("{nested_pad}{item},\n")
-    }
-
-    fn format_bare_sub_array_inline(&self, sub_items: &[String], nested_pad: &str) -> String {
-        let deeper_pad = format!("{nested_pad}{}", self.indent);
-        let mut result = format!("{nested_pad}[\n");
-        for sub in sub_items {
-            if let Some(expanded) = self.expand_inline_closure(sub, &deeper_pad) {
-                result.push_str(&expanded);
-                continue;
-            }
-            result.push_str(&format!("{deeper_pad}{sub},\n"));
-        }
-        result.push_str(&format!("{nested_pad}],\n"));
-        result
     }
 
     pub(crate) fn expand_bare_sub_array(&self, item: &str, pad: &str) -> Option<String> {
@@ -783,6 +769,10 @@ impl Formatter {
 
     pub(crate) fn expand_nested_array(&self, arg: &str, pad: &str) -> Option<String> {
         let (skip, arrow_pos) = find_array_arrow(arg)?;
+        let key = &arg[..skip + arrow_pos + 2];
+        if key.trim_start().starts_with('[') {
+            return None;
+        }
         let value = arg[skip + arrow_pos + 2..].trim();
         if !value.starts_with('[') || !value.ends_with(']') {
             return None;
@@ -794,7 +784,6 @@ impl Formatter {
         if items.len() <= 1 && !single_nested_array && !has_closure {
             return None;
         }
-        let key = &arg[..skip + arrow_pos + 2];
         let nested_pad = format!("{pad}{}", self.indent);
         let mut result = format!("{pad}{key} [\n");
         for item in &items {

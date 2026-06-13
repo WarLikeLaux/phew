@@ -4,7 +4,7 @@ use super::docblock::{emit_docblock_php, expand_single_line_docblock, is_docbloc
 use super::echo::{contains_break, is_echo_block_closer, is_echo_block_opener};
 use super::indent::{
     has_switch_case, is_header_php_block, is_php_block_closer, is_php_block_opener, is_switch_case_peer,
-    split_header_and_opener, visual_len,
+    php_alt_depth_delta, split_header_and_opener, visual_len,
 };
 use super::normalize::normalize_statements;
 use super::php::format_php_code;
@@ -45,6 +45,19 @@ fn is_self_contained_brace_switch(code: &str) -> bool {
         i += 1;
     }
     braces == 0
+}
+
+fn apply_depth_delta(depth: &mut usize, delta: i32) {
+    if delta < 0 {
+        *depth = depth.saturating_sub(delta.unsigned_abs() as usize);
+    } else {
+        *depth += delta as usize;
+    }
+}
+
+fn line_indent(line: &str) -> &str {
+    let width = line.len() - line.trim_start().len();
+    &line[..width]
 }
 
 impl Formatter {
@@ -91,7 +104,7 @@ impl Formatter {
 
     fn emit_multiline_php(&self, code: &str, pad: &str, depth: &mut usize, output: &mut String) {
         let is_header = is_header_php_block(code);
-        if is_header {
+        let reindented = if is_header {
             if let Some((header_code, opener_line)) = split_header_and_opener(code) {
                 output.push_str(&format!("{pad}<?php\n"));
                 let reindented = self.reindent_php_block(&header_code, pad);
@@ -104,37 +117,39 @@ impl Formatter {
                 return;
             }
             output.push_str(&format!("{pad}<?php\n"));
-            let reindented = self.reindent_php_block(code, pad);
-            output.push_str(&reindented);
+            let block = self.reindent_php_block(code, pad);
+            output.push_str(&block);
             output.push('\n');
             output.push_str(&format!("{pad}?>\n"));
+            block
         } else {
-            self.emit_multiline_php_inline(code, pad, output);
-        }
+            self.emit_multiline_php_inline(code, *depth, output)
+        };
         let has_widget_begin = contains_outside_strings(code, "::begin(");
         let has_widget_end = contains_outside_strings(code, "::end(");
-        if has_widget_begin || has_widget_end || !is_header {
-            if has_widget_end {
-                *depth = depth.saturating_sub(1);
-            }
-            if has_widget_begin || (!is_php_block_closer(code) && is_php_block_opener(code)) {
-                *depth += 1;
-            }
+        if has_widget_end {
+            *depth = depth.saturating_sub(1);
         }
+        if has_widget_begin {
+            *depth += 1;
+        }
+        apply_depth_delta(depth, php_alt_depth_delta(&reindented));
     }
 
-    fn emit_multiline_php_inline(&self, code: &str, pad: &str, output: &mut String) {
-        let reindented = self.reindent_php_block(code, pad);
+    fn emit_multiline_php_inline(&self, code: &str, depth: usize, output: &mut String) -> String {
+        let reindented = self.reindent_php_block_from_depth(code, depth);
         let lines: Vec<&str> = reindented.lines().filter(|l| !l.trim().is_empty()).collect();
         if lines.len() > 1 {
             if lines[0].trim_start().starts_with("/**") {
-                output.push_str(&format!("{pad}<?php\n"));
+                let first_pad = line_indent(lines[0]);
+                output.push_str(&format!("{first_pad}<?php\n"));
                 for line in &lines[..lines.len() - 1] {
                     output.push_str(line);
                     output.push('\n');
                 }
             } else {
-                output.push_str(&format!("{pad}<?php {}\n", lines[0].trim_start()));
+                let first_pad = line_indent(lines[0]);
+                output.push_str(&format!("{first_pad}<?php {}\n", lines[0].trim_start()));
                 for line in &lines[1..lines.len() - 1] {
                     output.push_str(line);
                     output.push('\n');
@@ -143,13 +158,15 @@ impl Formatter {
             output.push_str(&format!("{} ?>\n", lines[lines.len() - 1]));
         } else if lines.len() == 1 {
             let formatted = lines[0].trim_start();
-            if let Some(split) = self.split_inline_php(formatted, pad) {
+            let first_pad = line_indent(lines[0]);
+            if let Some(split) = self.split_inline_php(formatted, first_pad) {
                 let split_lines: Vec<&str> = split.lines().filter(|l| !l.trim().is_empty()).collect();
-                self.emit_php_lines(&split_lines, pad, output);
+                self.emit_php_lines(&split_lines, first_pad, output);
             } else {
-                output.push_str(&format!("{pad}<?php {formatted} ?>\n"));
+                output.push_str(&format!("{first_pad}<?php {formatted} ?>\n"));
             }
         }
+        reindented
     }
 
     fn emit_single_php(&self, code: &str, pad: &str, state: &mut PhpDepthState, output: &mut String) {
@@ -273,6 +290,9 @@ impl Formatter {
 
     pub(crate) fn emit_php_block(&self, code: &str, pad: &str, state: &mut PhpDepthState, output: &mut String) {
         let trimmed = code.trim();
+        if trimmed.is_empty() {
+            return;
+        }
         if is_declaration_block(trimmed) {
             self.emit_declaration_block(code, pad, output);
             return;

@@ -55,6 +55,49 @@ pub fn is_switch_case_peer(code: &str) -> bool {
     lower.starts_with("case ") || lower.starts_with("default:")
 }
 
+pub(crate) fn php_alt_depth_delta(code: &str) -> i32 {
+    code.lines()
+        .map(format_php_code)
+        .map(|line| php_alt_open_delta(&line) - php_alt_close_delta(&line))
+        .sum()
+}
+
+fn php_alt_close_delta(line: &str) -> i32 {
+    let lower = line.trim().to_lowercase();
+    i32::from(
+        lower.starts_with("endif")
+            || lower.starts_with("endforeach")
+            || lower.starts_with("endfor")
+            || lower.starts_with("endwhile")
+            || lower.starts_with("endswitch")
+            || lower == "else:"
+            || lower.starts_with("elseif ")
+            || lower.starts_with("elseif("),
+    )
+}
+
+fn php_alt_open_delta(line: &str) -> i32 {
+    let lower = line.trim().to_lowercase();
+    if lower == "):" {
+        return 1;
+    }
+    i32::from(
+        (lower.starts_with("if ") && lower.ends_with(':'))
+            || (lower.starts_with("if(") && lower.ends_with(':'))
+            || (lower.starts_with("elseif ") && lower.ends_with(':'))
+            || (lower.starts_with("elseif(") && lower.ends_with(':'))
+            || lower == "else:"
+            || (lower.starts_with("foreach ") && lower.ends_with(':'))
+            || (lower.starts_with("foreach(") && lower.ends_with(':'))
+            || (lower.starts_with("for ") && lower.ends_with(':'))
+            || (lower.starts_with("for(") && lower.ends_with(':'))
+            || (lower.starts_with("while ") && lower.ends_with(':'))
+            || (lower.starts_with("while(") && lower.ends_with(':'))
+            || (lower.starts_with("switch ") && lower.ends_with(':'))
+            || (lower.starts_with("switch(") && lower.ends_with(':')),
+    )
+}
+
 pub fn is_header_php_block(code: &str) -> bool {
     if code.trim_start().starts_with("/**") && !is_php_block_opener(code) {
         return true;
@@ -181,7 +224,12 @@ pub fn split_header_and_opener(code: &str) -> Option<(String, String)> {
 
 impl Formatter {
     pub(crate) fn emit_reindented_line(&self, formatted: &str, pad: &str, depth: &mut i32, result: &mut String) {
-        let leading = (count_leading_closers(formatted) as i32).min(1);
+        let alt_close = php_alt_close_delta(formatted);
+        let is_lone_semicolon = formatted.trim() == ";";
+        let leading = (count_leading_closers(formatted) as i32)
+            .min(1)
+            .max(alt_close)
+            .max(i32::from(is_lone_semicolon));
         let is_continuation = formatted.starts_with("? ")
             || formatted.starts_with(": ")
             || formatted.starts_with("|| ")
@@ -206,7 +254,14 @@ impl Formatter {
         }
         let (openers, closers) = count_brackets(formatted);
         let net = openers as i32 - closers as i32;
-        *depth += net.clamp(-1, 1);
+        let bracket_delta = net.clamp(-1, 1);
+        *depth += bracket_delta + php_alt_open_delta(formatted) - alt_close;
+        if is_continuation && net > 0 {
+            *depth = (*depth).max((write_depth + 1) as i32);
+        }
+        if is_lone_semicolon {
+            *depth -= 1;
+        }
         *depth = (*depth).max(0);
     }
 }
@@ -268,6 +323,21 @@ impl Formatter {
         };
         Reindenter::new(self, pad, mode).run(&code)
     }
+
+    pub(crate) fn reindent_php_block_from_depth(&self, code: &str, depth: usize) -> String {
+        let needs_normalize = !code.contains('\n') && (code.contains(';') || has_switch_case(code));
+        let code = if needs_normalize {
+            normalize_statements(code)
+        } else {
+            join_logical_lines(&join_ternary_lines(code))
+        };
+        let mode = if is_header_php_block(&code) {
+            ReindentMode::Header
+        } else {
+            ReindentMode::Inline
+        };
+        Reindenter::new_with_depth(self, "", mode, depth as i32).run(&code)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -299,12 +369,16 @@ struct Reindenter<'a> {
 
 impl<'a> Reindenter<'a> {
     fn new(fmt: &'a Formatter, pad: &'a str, mode: ReindentMode) -> Self {
+        Self::new_with_depth(fmt, pad, mode, 0)
+    }
+
+    fn new_with_depth(fmt: &'a Formatter, pad: &'a str, mode: ReindentMode, depth: i32) -> Self {
         Self {
             fmt,
             pad,
             mode,
             result: String::new(),
-            depth: 0,
+            depth,
             switch_levels: Vec::new(),
             prev_blank: false,
             first_content: true,
@@ -462,7 +536,7 @@ impl<'a> Reindenter<'a> {
                 self.flush_deferred();
                 self.result.push('\n');
             }
-            self.flush_pending_docblocks();
+            self.flush_pending_docblocks_for_next(trimmed);
             self.prev_was_doc_close = true;
             self.prev_blank = false;
             false
@@ -473,6 +547,17 @@ impl<'a> Reindenter<'a> {
         } else {
             false
         }
+    }
+
+    fn flush_pending_docblocks_for_next(&mut self, next: &str) {
+        let close_delta = php_alt_close_delta(next);
+        if close_delta == 0 {
+            self.flush_pending_docblocks();
+            return;
+        }
+        self.depth = (self.depth - close_delta).max(0);
+        self.flush_pending_docblocks();
+        self.depth += close_delta;
     }
 
     fn flush_pending_docblocks(&mut self) {
