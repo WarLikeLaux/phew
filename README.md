@@ -33,7 +33,7 @@ View-файлы Yii 2 - это `.php` с HTML, PHP-вставками, видж�
 ## Установка
 
 ```bash
-cargo install --git https://github.com/WarLikeLaux/phew --force
+cargo install phew
 ```
 
 ## Использование
