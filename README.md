@@ -9,9 +9,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
-[![Tests](https://img.shields.io/badge/Tests-123_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
+[![Tests](https://img.shields.io/badge/Tests-122_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
 [![Fixtures](https://img.shields.io/badge/Fixtures-169_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-0.10.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
+[![Version](https://img.shields.io/badge/Version-1.0.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -184,7 +184,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**123 unit-теста**, **169 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
+**122 unit-теста**, **169 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures

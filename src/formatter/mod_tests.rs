@@ -95,6 +95,35 @@ fn body_within_tag_width_window_still_splits() {
 }
 
 #[test]
+fn long_alt_syntax_opener_splits_condition() {
+    let input = "<?php if ($model instanceof Product && (Yii::$app->user->can('/*') || Yii::$app->user->can('/product/*') || Yii::$app->user->can('/product/update'))): ?>";
+    let out = Formatter::default().format_source(input);
+    assert!(out.lines().all(|line| line.chars().count() <= 120), "got: {out}");
+    assert!(out.contains("<?php if (\n"), "got: {out}");
+    assert!(out.contains("\n    && ("), "got: {out}");
+    assert_eq!(out, Formatter::default().format_source(&out));
+}
+
+#[test]
+fn narrow_alt_syntax_opener_splits_nested_condition() {
+    let cfg = Config {
+        max_line_length: 80,
+        ..Config::default()
+    };
+    let input = "<?php if ($model instanceof Product && (Yii::$app->user->can('/*') || Yii::$app->user->can('/product/*') || Yii::$app->user->can('/product/update'))): ?>";
+    let out = Formatter::new(&cfg).format_source(input);
+    assert!(out.lines().all(|line| line.chars().count() <= 80), "got: {out}");
+    assert!(out.contains("\n    && (\n"), "got: {out}");
+    assert_eq!(out, Formatter::new(&cfg).format_source(&out));
+}
+
+#[test]
+fn short_echo_drops_trailing_semicolon() {
+    let out = Formatter::default().format_source("<?= $x; ?>\n");
+    assert_eq!(out, "<?= $x ?>\n");
+}
+
+#[test]
 fn strips_utf8_bom() {
     let out = Formatter::default().format_source("\u{FEFF}<div>\n<span>x</span>\n</div>\n");
     assert_eq!(out, "<div>\n    <span>x</span>\n</div>\n");

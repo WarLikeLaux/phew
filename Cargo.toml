@@ -1,11 +1,19 @@
 [package]
 name = "phew"
-version = "0.10.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Fast HTML + PHP formatter for Yii 2 view files"
 license = "MIT"
 repository = "https://github.com/WarLikeLaux/phew"
+exclude = [
+    ".claude/**",
+    ".github/**",
+    ".vscode/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/ai/**",
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

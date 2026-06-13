@@ -1,50 +1,44 @@
 default:
     @just --list
 
-# показать список команд
 help:
     @just --list
 
-# форматирование + линтер
+alias pf := pack-fixtures
+
 dev: fmt lint
     @echo "✅ dev ok"
 
-# юнит-тесты (cargo test)
 test:
     cargo test
 
-# линтер + тесты + фикстуры
 check: lint test fixtures
     @echo "✅ check ok"
 
-# cargo fmt
 fmt:
     cargo fmt
 
-# cargo clippy с -D warnings
 lint:
-    cargo clippy -- -D warnings
+    cargo clippy --all-targets -- -D warnings
 
-# релизная сборка
 build:
     cargo build --release
 
-# запуск форматтера
 run *args:
     cargo run -- {{args}}
 
-# запуск форматтера с записью (-w)
 fix *args:
     cargo run -- -w {{args}}
 
-# фикстурные тесты (input → expected)
 fixtures:
     ./bin/check-fixtures
 
-# очистка target/
+pack-fixtures:
+    @command -v npx >/dev/null 2>&1 || { echo "npx не установлен"; exit 127; }
+    npx -y repomix@1.14.1 --include "tests/fixtures/expected/**" --output packed-fixtures.xml --style xml
+
 clean:
     cargo clean
 
-# git diff --staged
 dc:
     git diff --staged

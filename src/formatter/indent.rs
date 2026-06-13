@@ -135,7 +135,7 @@ impl Formatter {
             || formatted.starts_with("&& ")
             || formatted.starts_with(". ")
             || formatted.starts_with("->");
-        let extra = i32::from(is_continuation);
+        let extra = i32::from(is_continuation && *depth == 0);
         let write_depth = (*depth - leading + extra).max(0) as usize;
         let inner_pad = self.indent.repeat(write_depth);
         let base_pad = format!("{pad}{inner_pad}");

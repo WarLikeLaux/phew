@@ -2,25 +2,39 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 
 use ignore::{WalkBuilder, WalkState};
+use thiserror::Error;
 
 const FORMATTABLE_EXTENSIONS: [&str; 2] = ["php", "html"];
 const PHEW_IGNORE_FILE: &str = ".phewignore";
 
-pub fn collect_files(paths: &[String]) -> Vec<PathBuf> {
+#[derive(Debug, Error)]
+pub enum WalkError {
+    #[error("ошибка обхода файлов: {0}")]
+    Walk(ignore::Error),
+    #[error("не удалось прочитать metadata {path}: {source}")]
+    Metadata { path: PathBuf, source: std::io::Error },
+}
+
+pub fn collect_files(paths: &[String]) -> Result<Vec<PathBuf>, WalkError> {
     let mut files = Vec::new();
     for path in paths {
         let target = Path::new(path);
         match std::fs::metadata(target) {
-            Ok(meta) if meta.is_dir() => files.extend(walk_dir(target)),
+            Ok(meta) if meta.is_dir() => files.extend(walk_dir(target)?),
             Ok(_) => files.push(target.to_path_buf()),
-            Err(e) => eprintln!("Error reading metadata {}: {e}", target.display()),
+            Err(source) => {
+                return Err(WalkError::Metadata {
+                    path: target.to_path_buf(),
+                    source,
+                });
+            }
         }
     }
-    files
+    Ok(files)
 }
 
-fn walk_dir(dir: &Path) -> Vec<PathBuf> {
-    let (tx, rx) = mpsc::channel::<PathBuf>();
+fn walk_dir(dir: &Path) -> Result<Vec<PathBuf>, WalkError> {
+    let (tx, rx) = mpsc::channel::<Result<PathBuf, ignore::Error>>();
     WalkBuilder::new(dir)
         .git_global(false)
         .git_exclude(false)
@@ -30,19 +44,28 @@ fn walk_dir(dir: &Path) -> Vec<PathBuf> {
         .run(|| {
             let tx = tx.clone();
             Box::new(move |result| {
-                if let Ok(entry) = result
-                    && entry.file_type().is_some_and(|file_type| file_type.is_file())
-                    && is_formattable(entry.path())
-                {
-                    let _ = tx.send(entry.into_path());
+                match result {
+                    Ok(entry)
+                        if entry.file_type().is_some_and(|file_type| file_type.is_file())
+                            && is_formattable(entry.path()) =>
+                    {
+                        let _ = tx.send(Ok(entry.into_path()));
+                    }
+                    Ok(_) => {}
+                    Err(source) => {
+                        let _ = tx.send(Err(source));
+                    }
                 }
                 WalkState::Continue
             })
         });
     drop(tx);
-    let mut files: Vec<PathBuf> = rx.iter().collect();
+    let mut files = Vec::new();
+    for result in rx {
+        files.push(result.map_err(WalkError::Walk)?);
+    }
     files.sort();
-    files
+    Ok(files)
 }
 
 fn is_formattable(path: &Path) -> bool {
@@ -97,7 +120,7 @@ mod tests {
         tree.touch("notes.txt");
         tree.touch("Makefile");
 
-        let files = collect_files(&[tree.arg()]);
+        let files = collect_files(&[tree.arg()]).unwrap();
         let names: Vec<String> = files
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
@@ -113,7 +136,7 @@ mod tests {
         tree.touch("deep/inner/leaf.php");
         tree.touch("deep/skip.css");
 
-        let files = collect_files(&[tree.arg()]);
+        let files = collect_files(&[tree.arg()]).unwrap();
 
         assert_eq!(files.len(), 2);
         assert!(files.iter().any(|p| p.ends_with("top.php")));
@@ -127,7 +150,7 @@ mod tests {
         tree.touch("vendor/dep.php");
         tree.write(".phewignore", "vendor/\n");
 
-        let files = collect_files(&[tree.arg()]);
+        let files = collect_files(&[tree.arg()]).unwrap();
         let names: Vec<String> = files
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
@@ -143,7 +166,7 @@ mod tests {
         tree.touch("build/gen.php");
         tree.write(".gitignore", "build/\n");
 
-        let files = collect_files(&[tree.arg()]);
+        let files = collect_files(&[tree.arg()]).unwrap();
         let names: Vec<String> = files
             .iter()
             .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
@@ -158,7 +181,7 @@ mod tests {
         tree.touch("raw");
 
         let arg = tree.root.join("raw").to_string_lossy().into_owned();
-        let files = collect_files(&[arg]);
+        let files = collect_files(&[arg]).unwrap();
 
         assert_eq!(files.len(), 1);
         assert!(files[0].ends_with("raw"));

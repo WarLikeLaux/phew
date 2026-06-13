@@ -202,9 +202,7 @@ impl Formatter {
             return;
         }
         let single = format!("{pad}<?php {formatted} ?>");
-        let is_alt_syntax_opener = code.trim().ends_with(':');
-        if (visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted)) || is_alt_syntax_opener
-        {
+        if visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted) {
             output.push_str(&format!("{single}\n"));
             if is_php_block_opener(code) {
                 *depth += 1;

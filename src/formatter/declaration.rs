@@ -281,7 +281,11 @@ pub(crate) fn apply_psr12_declarations(code: &str) -> String {
                 account_member(&mut frames, &mut out, true);
             }
             match decl.body {
-                Body::Empty => out.push(format!("{} {{}}", decl.header)),
+                Body::Empty => {
+                    out.push(decl.header.to_string());
+                    out.push("{".to_string());
+                    out.push("}".to_string());
+                }
                 Body::Bodyless => out.push(decl.header.to_string()),
                 Body::Block => {
                     out.push(decl.header.to_string());

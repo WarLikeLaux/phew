@@ -2,6 +2,8 @@
 
 final class Money
 {
-    public function __construct(public readonly int $amount, public readonly string $currency = 'USD') {}
+    public function __construct(public readonly int $amount, public readonly string $currency = 'USD')
+    {
+    }
 }
 ?>

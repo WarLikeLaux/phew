@@ -199,7 +199,9 @@ impl Formatter {
             .iter()
             .filter_map(|c| match c {
                 Node::Text(s) => Some(s.as_str()),
-                _ => None,
+                Node::Element { .. } | Node::PhpBlock(_) | Node::PhpEcho(_) | Node::Doctype(_) | Node::Comment(_) => {
+                    None
+                }
             })
             .collect();
         output.push_str(&format!("{pad}<{name}{attrs}>{content}</{name}>\n"));
@@ -344,7 +346,7 @@ fn is_inline_element_node(node: &Node) -> bool {
         Node::Element { name, children, .. } => {
             is_truly_inline_element(name) && (is_void_element(name) || is_inline_content(children))
         }
-        _ => false,
+        Node::Text(_) | Node::PhpBlock(_) | Node::PhpEcho(_) | Node::Doctype(_) | Node::Comment(_) => false,
     }
 }
 
@@ -415,7 +417,7 @@ fn collect_inline_run(nodes: &[Node], start: usize) -> Option<usize> {
                     break;
                 }
             }
-            _ => break,
+            Node::Element { .. } | Node::PhpBlock(_) | Node::Doctype(_) | Node::Comment(_) => break,
         }
     }
     if has_echo && (has_text || has_inline_elem) && end > start + 1 {
@@ -531,7 +533,12 @@ fn try_merge_header_blocks(nodes: &[Node], start: usize, code: &str) -> Option<(
                 merged_any = true;
                 j += 1;
             }
-            _ => break,
+            Node::Text(_)
+            | Node::Element { .. }
+            | Node::PhpBlock(_)
+            | Node::PhpEcho(_)
+            | Node::Doctype(_)
+            | Node::Comment(_) => break,
         }
     }
     merged_any.then_some((merged, j))
