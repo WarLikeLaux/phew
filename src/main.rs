@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use anyhow::Context;
 use clap::{ArgGroup, Parser};
 use rayon::prelude::*;
 use similar::TextDiff;
@@ -190,73 +191,77 @@ fn diff_text(label: &str, content: &str, formatter: &Formatter) -> String {
     format!("{unified}")
 }
 
-fn load(path: &Path) -> Option<String> {
-    match std::fs::read_to_string(path) {
-        Ok(content) => Some(content),
-        Err(e) => {
-            eprintln!("Error reading {}: {e}", path.display());
-            None
-        }
-    }
+fn load(path: &Path) -> anyhow::Result<String> {
+    std::fs::read_to_string(path).with_context(|| format!("не удалось прочитать {}", path.display()))
 }
 
 fn label(path: &Path) -> String {
     path.display().to_string()
 }
 
-fn print_pass<F>(files: &[PathBuf], render: F) -> ExitCode
+fn print_pass<F>(files: &[PathBuf], render: F) -> anyhow::Result<ExitCode>
 where
     F: Fn(&Path, &str) -> String + Sync,
 {
-    let outputs: Vec<String> = files
+    let outputs: Vec<anyhow::Result<String>> = files
         .par_iter()
-        .map(|path| match load(path) {
-            Some(content) => render(path, &content),
-            None => String::new(),
+        .map(|path| {
+            let content = load(path)?;
+            Ok(render(path, &content))
         })
         .collect();
 
     let mut stdout = std::io::stdout().lock();
-    for output in &outputs {
-        let _ = stdout.write_all(output.as_bytes());
+    for output in outputs {
+        stdout.write_all(output?.as_bytes())?;
     }
-    ExitCode::SUCCESS
+    Ok(ExitCode::SUCCESS)
 }
 
-fn write_pass(files: &[PathBuf], formatter: &Formatter) -> ExitCode {
-    files.par_iter().for_each(|path| {
-        let Some(content) = load(path) else {
-            return;
-        };
-        let formatted = format_content(&content, formatter);
-        if formatted != content
-            && let Err(e) = std::fs::write(path, &formatted)
-        {
-            eprintln!("Error writing {}: {e}", path.display());
-        }
-    });
-    ExitCode::SUCCESS
-}
-
-fn check_pass(files: &[PathBuf], formatter: &Formatter) -> ExitCode {
-    let unformatted: Vec<&PathBuf> = files
+fn write_pass(files: &[PathBuf], formatter: &Formatter) -> anyhow::Result<ExitCode> {
+    let results: Vec<anyhow::Result<()>> = files
         .par_iter()
-        .filter(|path| match load(path) {
-            Some(content) => format_content(&content, formatter) != content,
-            None => false,
+        .map(|path| {
+            let content = load(path)?;
+            let formatted = format_content(&content, formatter);
+            if formatted != content {
+                std::fs::write(path, &formatted).with_context(|| format!("не удалось записать {}", path.display()))?;
+            }
+            Ok(())
         })
         .collect();
+    for result in results {
+        result?;
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn check_pass(files: &[PathBuf], formatter: &Formatter) -> anyhow::Result<ExitCode> {
+    let results: Vec<anyhow::Result<Option<PathBuf>>> = files
+        .par_iter()
+        .map(|path| {
+            let content = load(path)?;
+            let formatted = format_content(&content, formatter);
+            Ok((formatted != content).then(|| path.to_path_buf()))
+        })
+        .collect();
+    let mut unformatted = Vec::new();
+    for result in results {
+        if let Some(path) = result? {
+            unformatted.push(path);
+        }
+    }
 
     if unformatted.is_empty() {
-        return ExitCode::SUCCESS;
+        return Ok(ExitCode::SUCCESS);
     }
 
     let mut stderr = std::io::stderr().lock();
     for path in &unformatted {
-        let _ = writeln!(stderr, "не отформатирован: {}", path.display());
+        writeln!(stderr, "не отформатирован: {}", path.display())?;
     }
-    let _ = writeln!(stderr, "Требуют форматирования: {}", unformatted.len());
-    ExitCode::FAILURE
+    writeln!(stderr, "Требуют форматирования: {}", unformatted.len())?;
+    Ok(ExitCode::FAILURE)
 }
 
 fn run_stdin(mode: Mode, formatter: &Formatter) -> anyhow::Result<ExitCode> {
@@ -317,7 +322,7 @@ fn run() -> anyhow::Result<ExitCode> {
         return run_stdin(mode, &formatter);
     }
 
-    let files = walker::collect_files(&cli.paths);
+    let files = walker::collect_files(&cli.paths)?;
     let exit = match mode {
         Mode::Format => print_pass(&files, |_, content| format_content(content, &formatter)),
         Mode::Tokens => print_pass(&files, |path, content| dump_tokens(&label(path), content)),
@@ -325,7 +330,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Mode::Diff => print_pass(&files, |path, content| diff_text(&label(path), content, &formatter)),
         Mode::Write => write_pass(&files, &formatter),
         Mode::Check => check_pass(&files, &formatter),
-    };
+    }?;
     Ok(exit)
 }
 
@@ -337,7 +342,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("{e:?}");
+            eprintln!("{e}");
             ExitCode::FAILURE
         }
     }

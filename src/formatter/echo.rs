@@ -2,8 +2,8 @@ use super::Formatter;
 use super::indent::visual_len;
 use super::php::{format_php_code, join_php_lines, split_by_args, split_by_chain, split_by_concat};
 use super::scan::{
-    contains_heredoc, contains_outside_strings, find_array_arrow, find_matching_close, find_ternary_positions,
-    has_expandable_closure, split_by_commas,
+    contains_heredoc, contains_outside_strings, count_top_level_semicolons, find_array_arrow, find_matching_close,
+    find_ternary_positions, has_expandable_closure, split_by_commas,
 };
 
 const WIDGET_MARKER: &str = "::widget(";
@@ -40,6 +40,14 @@ fn is_structural_widget(code: &str) -> bool {
         return false;
     };
     widget_config_is_structural(body)
+}
+
+fn strip_echo_semicolon(code: &str) -> &str {
+    let trimmed = code.trim();
+    if count_top_level_semicolons(trimmed) == 1 {
+        return trimmed.strip_suffix(';').map(str::trim_end).unwrap_or(trimmed);
+    }
+    trimmed
 }
 
 pub fn is_echo_block_opener(code: &str) -> bool {
@@ -99,7 +107,8 @@ impl Formatter {
             return format_heredoc_echo(code, pad);
         }
         let joined = join_php_lines(code);
-        let formatted = format_php_code(&joined);
+        let joined = strip_echo_semicolon(&joined);
+        let formatted = format_php_code(joined);
         let single = format!("{pad}<?= {formatted} ?>");
 
         let fits = visual_len(&single) <= self.max_line_length && !has_expandable_closure(&formatted);

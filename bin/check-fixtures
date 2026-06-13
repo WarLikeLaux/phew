@@ -40,7 +40,6 @@ fi
 
 shopt -s nullglob
 
-# orphan check: expected without input
 for expected in "$DIR"/expected/*; do
     name=$(basename "$expected")
     if [ ! -f "$DIR/input/$name" ]; then

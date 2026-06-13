@@ -114,6 +114,18 @@ fn diff_is_empty_for_formatted() {
 }
 
 #[test]
+fn missing_file_fails() {
+    let missing = std::env::temp_dir()
+        .join(format!("phew_cli_missing_{}_file.php", std::process::id()))
+        .to_string_lossy()
+        .into_owned();
+
+    let (_, code) = run(&[&missing], None);
+
+    assert_ne!(code, 0);
+}
+
+#[test]
 fn conflicting_modes_are_rejected() {
     let (_, code) = run(&["--write", "--check", FIXTURE], None);
 

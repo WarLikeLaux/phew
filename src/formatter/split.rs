@@ -10,6 +10,26 @@ use super::scan::{
 
 const PHP_INLINE_TAG_WIDTH: usize = "<?php ".len() + " ?>".len();
 
+fn control_condition_prefix(prefix: &str) -> Option<&str> {
+    matches!(prefix, "if" | "elseif" | "while").then_some(prefix)
+}
+
+fn logical_operands(formatted: &str, op: BinaryOp, positions: &[usize]) -> Option<Vec<String>> {
+    let chars: Vec<char> = formatted.chars().collect();
+    let mut operands: Vec<String> = Vec::with_capacity(positions.len() + 1);
+    let mut start = 0;
+    for &pos in positions {
+        operands.push(chars[start..pos].iter().collect::<String>().trim().to_string());
+        start = pos + op.char_len();
+    }
+    operands.push(chars[start..].iter().collect::<String>().trim().to_string());
+
+    if operands.iter().any(String::is_empty) || !logical_roundtrip_ok(formatted, &operands, op.token()) {
+        return None;
+    }
+    Some(operands)
+}
+
 impl Formatter {
     pub(crate) fn append_ternary_value(&self, result: &mut String, marker: char, value: &str, line_pad: &str) {
         let single_len = visual_len(line_pad) + 2 + visual_len(value);
@@ -52,6 +72,10 @@ impl Formatter {
     }
 
     pub(crate) fn split_long_line(&self, formatted: &str, base_pad: &str) -> Option<String> {
+        if let Some(split) = self.split_control_condition(formatted, base_pad) {
+            return Some(split);
+        }
+
         if let Some(split) = self.split_long_by_commas(formatted, base_pad) {
             return Some(split);
         }
@@ -65,6 +89,10 @@ impl Formatter {
             self.append_ternary_value(&mut result, '?', true_val, &inner_pad);
             self.append_ternary_value(&mut result, ':', false_val, &inner_pad);
             return Some(result);
+        }
+
+        if let Some(split) = self.split_parenthesized_expression(formatted, base_pad) {
+            return Some(split);
         }
 
         if let Some(split) = self.split_long_by_logical(formatted, base_pad) {
@@ -122,6 +150,69 @@ impl Formatter {
         None
     }
 
+    fn split_control_condition(&self, formatted: &str, base_pad: &str) -> Option<String> {
+        let chars: Vec<char> = formatted.chars().collect();
+        let open_pos = chars.iter().position(|&c| c == '(')?;
+        let close_pos = find_matching_close(&chars, open_pos)?;
+        let prefix: String = chars[..open_pos].iter().collect();
+        let prefix = control_condition_prefix(prefix.trim_end())?;
+        let suffix: String = chars[close_pos + 1..].iter().collect();
+        let suffix = suffix.trim();
+        if suffix != ":" && suffix != "{" {
+            return None;
+        }
+        let inner: String = chars[open_pos + 1..close_pos].iter().collect();
+        let inner = inner.trim();
+        let inner_pad = format!("{base_pad}{}", self.indent);
+        let split_inner = self
+            .split_condition_logical(inner, &inner_pad)
+            .or_else(|| self.split_long_line(inner, &inner_pad))
+            .unwrap_or_else(|| format!("{inner_pad}{inner}\n"));
+        let mut result = format!("{base_pad}{prefix} (\n");
+        result.push_str(&split_inner);
+        result.push_str(&format!("{base_pad}){suffix}\n"));
+        Some(result)
+    }
+
+    fn split_condition_logical(&self, formatted: &str, line_pad: &str) -> Option<String> {
+        for op in [BinaryOp::Or, BinaryOp::And, BinaryOp::Concat] {
+            let positions = find_top_level_binary_op(formatted, op);
+            if positions.is_empty() {
+                continue;
+            }
+            let operands = logical_operands(formatted, op, &positions)?;
+            let token = op.token();
+            let mut result = format!("{line_pad}{}\n", operands[0]);
+            for operand in &operands[1..] {
+                self.append_logical_operand(&mut result, token, operand, line_pad);
+            }
+            return Some(result);
+        }
+        None
+    }
+
+    fn split_parenthesized_expression(&self, formatted: &str, base_pad: &str) -> Option<String> {
+        let trimmed = formatted.trim();
+        if !trimmed.starts_with('(') {
+            return None;
+        }
+        let chars: Vec<char> = trimmed.chars().collect();
+        let close_pos = find_matching_close(&chars, 0)?;
+        if close_pos + 1 != chars.len() {
+            return None;
+        }
+        let inner: String = chars[1..close_pos].iter().collect();
+        let inner_pad = format!("{base_pad}{}", self.indent);
+        let split_inner = self
+            .split_condition_logical(inner.trim(), &inner_pad)
+            .or_else(|| self.split_long_line(inner.trim(), &inner_pad))
+            .unwrap_or_else(|| format!("{inner_pad}{inner}\n"));
+        let mut result = format!("{base_pad}(\n");
+        result.push_str(&split_inner);
+        result.push_str(&format!("{base_pad})\n"));
+        Some(result)
+    }
+
     fn split_long_by_logical(&self, formatted: &str, base_pad: &str) -> Option<String> {
         for op in [BinaryOp::Or, BinaryOp::And, BinaryOp::Concat] {
             let positions = find_top_level_binary_op(formatted, op);
@@ -142,27 +233,35 @@ impl Formatter {
         op: BinaryOp,
         positions: &[usize],
     ) -> Option<String> {
-        let chars: Vec<char> = formatted.chars().collect();
         let token = op.token();
-
-        let mut operands: Vec<String> = Vec::with_capacity(positions.len() + 1);
-        let mut start = 0;
-        for &pos in positions {
-            operands.push(chars[start..pos].iter().collect::<String>().trim().to_string());
-            start = pos + op.char_len();
-        }
-        operands.push(chars[start..].iter().collect::<String>().trim().to_string());
-
-        if operands.iter().any(String::is_empty) || !logical_roundtrip_ok(formatted, &operands, token) {
-            return None;
-        }
-
+        let operands = logical_operands(formatted, op, positions)?;
         let inner_pad = format!("{base_pad}{}", self.indent);
         let mut result = format!("{base_pad}{}\n", operands[0]);
         for operand in &operands[1..] {
-            result.push_str(&format!("{inner_pad}{token} {operand}\n"));
+            self.append_logical_operand(&mut result, token, operand, &inner_pad);
         }
         Some(result)
+    }
+
+    fn append_logical_operand(&self, result: &mut String, token: &str, operand: &str, inner_pad: &str) {
+        let single = format!("{inner_pad}{token} {operand}");
+        if visual_len(&single) <= self.max_line_length {
+            result.push_str(&format!("{single}\n"));
+            return;
+        }
+        if let Some(split) = self.split_parenthesized_expression(operand, inner_pad) {
+            let mut lines = split.lines();
+            if let Some(first) = lines.next() {
+                let first = first.strip_prefix(inner_pad).unwrap_or(first).trim_start();
+                result.push_str(&format!("{inner_pad}{token} {first}\n"));
+                for line in lines {
+                    result.push_str(line);
+                    result.push('\n');
+                }
+                return;
+            }
+        }
+        result.push_str(&format!("{single}\n"));
     }
 
     fn format_assignment_array_item(&self, item: &str, pad: &str) -> String {

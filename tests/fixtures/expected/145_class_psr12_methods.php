@@ -15,6 +15,8 @@ class Calculator
         return $this->total;
     }
 
-    public function __construct() {}
+    public function __construct()
+    {
+    }
 }
 ?>

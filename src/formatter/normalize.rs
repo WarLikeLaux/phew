@@ -259,16 +259,22 @@ pub(crate) fn join_ternary_lines(code: &str) -> String {
 
 pub(crate) fn join_logical_lines(code: &str) -> String {
     let mut result: Vec<String> = Vec::new();
+    let mut depth = 0i32;
     for line in code.lines() {
         let trimmed = line.trim_start();
-        if is_logical_continuation(trimmed)
+        if depth <= 0
+            && is_logical_continuation(trimmed)
             && let Some(last) = result.last_mut()
         {
             last.push(' ');
             last.push_str(trimmed);
+            let (openers, closers) = count_brackets(trimmed);
+            depth = (depth + openers as i32 - closers as i32).max(0);
             continue;
         }
         result.push(line.to_string());
+        let (openers, closers) = count_brackets(trimmed);
+        depth = (depth + openers as i32 - closers as i32).max(0);
     }
     result.join("\n")
 }

@@ -34,10 +34,13 @@ fn splits_class_brace_to_allman() {
 }
 
 #[test]
-fn keeps_empty_method_body_inline() {
+fn empty_method_body_uses_allman_block() {
     let normalized = "final class Money {\npublic function __construct(int $a) {\n}\n}";
     let out = apply_psr12_declarations(normalized);
-    assert_eq!(out, "final class Money\n{\npublic function __construct(int $a) {}\n}");
+    assert_eq!(
+        out,
+        "final class Money\n{\npublic function __construct(int $a)\n{\n}\n}"
+    );
 }
 
 #[test]
