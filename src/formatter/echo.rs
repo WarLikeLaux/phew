@@ -8,6 +8,55 @@ use super::scan::{
 
 const WIDGET_MARKER: &str = "::widget(";
 
+fn contains_line_comment(code: &str) -> bool {
+    let chars: Vec<char> = code.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    while i < len {
+        let ch = chars[i];
+        if ch == '\'' || ch == '"' {
+            i = skip_echo_string(&chars, i);
+            continue;
+        }
+        if ch == '/' && chars.get(i + 1) == Some(&'*') {
+            i = skip_echo_block_comment(&chars, i);
+            continue;
+        }
+        if (ch == '/' && chars.get(i + 1) == Some(&'/')) || (ch == '#' && chars.get(i + 1) != Some(&'[')) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+fn skip_echo_block_comment(chars: &[char], start: usize) -> usize {
+    let mut i = start + 2;
+    while i + 1 < chars.len() {
+        if chars[i] == '*' && chars[i + 1] == '/' {
+            return i + 2;
+        }
+        i += 1;
+    }
+    chars.len()
+}
+
+fn skip_echo_string(chars: &[char], start: usize) -> usize {
+    let quote = chars[start];
+    let mut i = start + 1;
+    while i < chars.len() {
+        if chars[i] == '\\' {
+            i += 2;
+            continue;
+        }
+        if chars[i] == quote {
+            return i + 1;
+        }
+        i += 1;
+    }
+    i
+}
+
 pub fn is_single_echo_block(code: &str) -> bool {
     let trimmed = code.trim();
     trimmed.starts_with("echo ") && !trimmed.contains('\n') && trimmed.matches(';').count() <= 1
@@ -106,6 +155,9 @@ impl Formatter {
         if contains_heredoc(code) {
             return format_heredoc_echo(code, pad);
         }
+        if contains_line_comment(code) {
+            return format_multiline_echo(code, pad);
+        }
         let joined = join_php_lines(code);
         let joined = strip_echo_semicolon(&joined);
         let formatted = format_php_code(joined);
@@ -172,6 +224,27 @@ impl Formatter {
             return expanded;
         }
         format!("{inner_pad}{arg},\n")
+    }
+}
+
+fn format_multiline_echo(code: &str, pad: &str) -> String {
+    let lines: Vec<&str> = code.lines().filter(|line| !line.trim().is_empty()).collect();
+    match lines.as_slice() {
+        [] => format!("{pad}<?= ?>\n"),
+        [single] => format!("{pad}<?= {} ?>\n", single.trim()),
+        [first, rest @ ..] => {
+            let mut result = format!("{pad}<?= {}\n", first.trim_start());
+            for line in &rest[..rest.len().saturating_sub(1)] {
+                result.push_str(pad);
+                result.push_str(line.trim_end());
+                result.push('\n');
+            }
+            let last = rest.last().copied().unwrap_or("");
+            result.push_str(pad);
+            result.push_str(last.trim_end());
+            result.push_str(" ?>\n");
+            result
+        }
     }
 }
 
