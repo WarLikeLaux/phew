@@ -10,8 +10,8 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/WarLikeLaux/phew/ci.yml?style=flat-square&logo=githubactions&logoColor=white&label=CI)](https://github.com/WarLikeLaux/phew/actions/workflows/ci.yml)
 [![Clippy](https://img.shields.io/badge/Clippy-0_warnings-brightgreen?style=flat-square&logo=rust&logoColor=white)](https://github.com/WarLikeLaux/phew/actions)
 [![Tests](https://img.shields.io/badge/Tests-125_passed-success?style=flat-square&logo=codecov&logoColor=white)](#тестирование)
-[![Fixtures](https://img.shields.io/badge/Fixtures-187_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
-[![Version](https://img.shields.io/badge/Version-1.0.0-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
+[![Fixtures](https://img.shields.io/badge/Fixtures-188_pairs-success?style=flat-square&logo=testcafe&logoColor=white)](#тестирование)
+[![Version](https://img.shields.io/badge/Version-1.0.1-orange?style=flat-square&logo=semver&logoColor=white)](Cargo.toml)
 
 ---
 
@@ -126,6 +126,22 @@ phew --indent-size 2 views/
 
 Приоритет: CLI-флаги → `.phew.toml` → значения по умолчанию.
 
+## Веб-интерфейс
+
+CLI остаётся лёгким: веб-зависимости не входят в сборку по умолчанию. Локально веб-интерфейс запускается отдельной командой:
+
+```bash
+just web
+```
+
+Или напрямую через Cargo:
+
+```bash
+cargo run --features web --bin phew-web
+```
+
+По умолчанию сервер слушает `127.0.0.1:3010` и отдаёт статические файлы из `web/`.
+
 ## Пример
 
 **До:** (всё в одну строку, без пробелов, смешанные кавычки)
@@ -192,7 +208,7 @@ phew --indent-size 2 views/
 
 ## Тестирование
 
-**125 unit-тестов**, **187 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Часть input-фикстур намеренно не проходит `php -l`: они проверяют recovery/normalization сценарии вроде дедупликации `use`, переноса `declare(strict_types=1)` и legacy short open tag. Expected-фикстуры обязаны быть чистыми: без табов, trailing whitespace, строк длиннее 120 символов. PHP expected дополнительно проверяются через `php -l`, если PHP CLI доступен. Полная проверка перед коммитом:
+**125 unit-тестов**, **188 fixture-пар** (`tests/fixtures/input/` → `tests/fixtures/expected/`) и **property-тесты** на идемпотентность, round-trip и фаззинг (`tests/properties.rs`). Часть input-фикстур намеренно не проходит `php -l`: они проверяют recovery/normalization сценарии вроде дедупликации `use`, переноса `declare(strict_types=1)` и legacy short open tag. Expected-фикстуры обязаны быть чистыми: без табов, trailing whitespace, строк длиннее 120 символов. PHP expected дополнительно проверяются через `php -l`, если PHP CLI доступен. Полная проверка перед коммитом:
 
 ```bash
 just check          # clippy + test + fixtures

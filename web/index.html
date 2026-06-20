@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>phew - быстрый Rust-форматтер HTML + PHP для Yii2 view-файлов</title>
+        <meta name="description" content="phew форматирует Yii2 view-файлы с HTML, PHP, GridView, ActiveForm, foreach, if и вложенными виджетами прямо в браузере через быстрый Rust-сервер.">
+        <meta name="application-name" content="phew">
+        <meta name="author" content="WarLikeLaux">
+        <meta name="robots" content="index,follow">
+        <meta name="theme-color" content="#bd5638">
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://github.com/WarLikeLaux/phew">
+        <meta property="og:title" content="phew - Rust-форматтер HTML + PHP для Yii2 view-файлов">
+        <meta property="og:description" content="Онлайн-интерфейс phew для форматирования Yii2 view-файлов: HTML, PHP, GridView, ActiveForm, foreach, if и вложенные шаблоны.">
+        <meta property="og:image" content="/hero.png">
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="phew - Rust-форматтер HTML + PHP для Yii2 view-файлов">
+        <meta name="twitter:description" content="Форматирование сложных Yii2 view-файлов прямо в браузере.">
+        <meta name="twitter:image" content="/hero.png">
+        <link rel="canonical" href="https://github.com/WarLikeLaux/phew">
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+        <link rel="stylesheet" href="/styles.css">
+    </head>
+    <body>
+        <div class="app">
+            <header class="topbar">
+                <div class="brand">
+                    <img class="brand-image" src="/hero.png" alt="phew">
+                    <div class="brand-copy">
+                        <strong>phew</strong>
+                        <span>Rust-форматтер для Yii2 view-файлов</span>
+                    </div>
+                </div>
+                <div class="top-right">
+                    <div class="headline">
+                        <span>HTML + PHP</span>
+                        <strong>Сложные шаблоны без ручного выравнивания</strong>
+                    </div>
+                    <nav class="top-links" aria-label="Ссылки проекта">
+                        <a class="top-link" href="https://github.com/WarLikeLaux/phew" target="_blank" rel="noreferrer">GitHub</a>
+                        <a class="top-link" href="https://crates.io/crates/phew" target="_blank" rel="noreferrer">crates.io</a>
+                        <a class="top-link" href="https://t.me/teagamesen" target="_blank" rel="noreferrer">Telegram</a>
+                    </nav>
+                </div>
+            </header>
+            <section class="commandbar">
+                <form class="settings" id="settings">
+                    <label>
+                        <span>Отступ</span>
+                        <select id="indentStyle" name="indentStyle">
+                            <option value="spaces">Пробелы</option>
+                            <option value="tabs">Табы</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Размер</span>
+                        <input id="indentSize" name="indentSize" type="number" min="1" max="12" value="4">
+                    </label>
+                    <label>
+                        <span>Длина строки</span>
+                        <input id="lineLength" name="lineLength" type="number" min="40" max="240" value="120">
+                    </label>
+                </form>
+                <div class="actions">
+                    <button class="button secondary" id="reloadExampleButton" type="button">Загрузить пример</button>
+                    <button class="button secondary" id="clearButton" type="button">Очистить</button>
+                    <button class="button secondary" id="copyButton" type="button">Копировать</button>
+                </div>
+            </section>
+            <main class="workspace">
+                <aside class="examples-panel">
+                    <div class="panel-head compact">
+                        <h1>Примеры</h1>
+                        <span id="exampleCount">0</span>
+                    </div>
+                    <div class="example-list" id="examplesList"></div>
+                </aside>
+                <section class="editors">
+                    <article class="editor-panel">
+                        <div class="panel-head">
+                            <h1>Исходник</h1>
+                            <span id="sourceStats">0 строк · 0 симв.</span>
+                        </div>
+                        <textarea id="source" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+                    </article>
+                    <article class="editor-panel">
+                        <div class="panel-head">
+                            <h1>Результат</h1>
+                            <span id="resultStats">0 строк · 0 симв.</span>
+                        </div>
+                        <pre class="code-preview" id="result" tabindex="0"></pre>
+                    </article>
+                </section>
+            </main>
+            <footer class="statusbar">
+                <span id="status">Готов</span>
+                <span id="changed">Без изменений</span>
+            </footer>
+        </div>
+        <script type="module" src="/app.js"></script>
+    </body>
+</html>

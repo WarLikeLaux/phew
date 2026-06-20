@@ -1,6 +1,6 @@
 [package]
 name = "phew"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Fast HTML + PHP formatter for Yii 2 view files"
@@ -13,9 +13,20 @@ exclude = [
     "AGENTS.md",
     "CLAUDE.md",
     "docs/ai/**",
+    "web/**",
 ]
 
+[features]
+default = []
+web = ["dep:axum", "dep:tokio", "dep:tower-http"]
+
+[[bin]]
+name = "phew-web"
+path = "src/bin/phew-web.rs"
+required-features = ["web"]
+
 [dependencies]
+axum = { version = "0.8", features = ["json"], optional = true }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
@@ -24,6 +35,8 @@ anyhow = "1"
 rayon = "1.10"
 similar = "2.6"
 ignore = "0.4"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"], optional = true }
+tower-http = { version = "0.6", features = ["fs"], optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

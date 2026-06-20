@@ -668,8 +668,69 @@ impl<'a> Reindenter<'a> {
             self.flush_deferred();
         }
         let result = self.result.trim_end_matches('\n').to_string() + "\n";
-        sort_use_lines(&result)
+        match self.mode {
+            ReindentMode::Header => sort_header_lines(&result),
+            ReindentMode::Inline | ReindentMode::Declaration => sort_use_lines(&result),
+        }
     }
+}
+
+fn sort_header_lines(code: &str) -> String {
+    let mut declares = Vec::new();
+    let mut uses = Vec::new();
+    let mut rest = Vec::new();
+    let mut has_leading_blank = false;
+
+    for line in code.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() && declares.is_empty() && uses.is_empty() && rest.is_empty() {
+            has_leading_blank = true;
+        } else if is_declare_stmt(trimmed) {
+            declares.push(line.to_string());
+        } else if is_use_import_line(trimmed) && trimmed.ends_with(';') {
+            uses.push(line.to_string());
+        } else {
+            rest.push(line.to_string());
+        }
+    }
+
+    uses.sort_by_key(|line| line.trim().to_lowercase());
+    uses.dedup_by(|a, b| a.trim() == b.trim());
+
+    let rest = trim_empty_edges(rest);
+    let mut sections = Vec::new();
+    if !declares.is_empty() {
+        sections.push(declares);
+    }
+    if !uses.is_empty() {
+        sections.push(uses);
+    }
+    if !rest.is_empty() {
+        sections.push(rest);
+    }
+
+    let mut result = Vec::new();
+    if has_leading_blank {
+        result.push(String::new());
+    }
+    for (index, section) in sections.iter().enumerate() {
+        if index > 0 {
+            result.push(String::new());
+        }
+        result.extend(section.iter().cloned());
+    }
+
+    result.join("\n") + "\n"
+}
+
+fn trim_empty_edges(mut lines: Vec<String>) -> Vec<String> {
+    while lines.first().is_some_and(|line| line.trim().is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    lines
 }
 
 fn sort_use_lines(code: &str) -> String {

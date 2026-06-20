@@ -20,12 +20,16 @@ fmt:
 
 lint:
     cargo clippy --all-targets -- -D warnings
+    cargo clippy --features web --all-targets -- -D warnings
 
 build:
     cargo build --release
 
 run *args:
     cargo run -- {{args}}
+
+web *args:
+    cargo run --features web --bin phew-web -- {{args}}
 
 fix *args:
     cargo run -- -w {{args}}
